@@ -34,6 +34,28 @@ export default function DashboardScreen()
     setAllergens(out);
   }
 
+  function getWarnings()
+  {
+    let list = [];
+    for (let i = 0; i < recentMeals.length; i++)
+    {
+      let meal = recentMeals[i];
+      let bad = false;
+      for (let j = 0; j < meal.tags.length; j++)
+      {
+        let tag = meal.tags[j];
+        for (let k = 0; k < allergens.length; k++)
+        {
+          if (tag === allergens[k]) { bad = true; }
+        }
+      }
+      if (bad) { list.push(meal); }
+    }
+    return list;
+  }
+
+  let warnings = getWarnings();
+
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <Text style={styles.h1}>Dashboard</Text>
@@ -70,10 +92,41 @@ export default function DashboardScreen()
 
       <View style={styles.section}>
         <Text style={styles.h2}>Recent Meals</Text>
+        {recentMeals.map(function (m: any)
+        {
+          return (
+            <View key={m.id} style={styles.card}>
+              <Text style={styles.cardTitle}>{m.name}</Text>
+              <Text style={styles.cardSub}>Tags: {m.tags.join(", ") || "None"}</Text>
+            </View>
+          );
+        })}
       </View>
 
       <View style={styles.section}>
         <Text style={styles.h2}>Warnings</Text>
+        {warnings.length === 0 ? (
+          <Text style={styles.ok}>no conflicts 🎉</Text>
+        ) : (
+          warnings.map(function (w: any)
+          {
+            let badTags = [];
+            for (let i = 0; i < w.tags.length; i++)
+            {
+              let t = w.tags[i];
+              for (let j = 0; j < allergens.length; j++)
+              {
+                if (t === allergens[j]) { badTags.push(t); }
+              }
+            }
+            return (
+              <View key={w.id} style={[styles.card, styles.cardWarn]}>
+                <Text style={styles.cardTitle}>⚠ {w.name}</Text>
+                <Text style={styles.cardSub}>Contains: {badTags.join(", ")}</Text>
+              </View>
+            );
+          })
+        )}
       </View>
     </ScrollView>
   );
