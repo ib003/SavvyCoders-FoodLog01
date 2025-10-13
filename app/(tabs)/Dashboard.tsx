@@ -1,8 +1,15 @@
-import React from "react";
+import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 export default function DashboardScreen()
 {
+  let [allergens, setAllergens] = useState(["Peanuts","Dairy","Gluten","Soy"]);
+  let [recentMeals] = useState([
+    { id: "m1", name: "Chicken Bowl", tags: ["Gluten-Free"] },
+    { id: "m2", name: "PB&J Sandwich", tags: ["Peanuts"] },
+    { id: "m3", name: "Greek Yogurt + Berries", tags: ["Dairy"] }
+  ]);
+
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <Text style={styles.h1}>Dashboard</Text>
@@ -10,12 +17,8 @@ export default function DashboardScreen()
       <View style={styles.section}>
         <Text style={styles.h2}>Quick Actions</Text>
         <View style={styles.row}>
-          <View style={[styles.btn, styles.btnPrimary]}>
-            <Text style={styles.btnText}>+ Add Meal</Text>
-          </View>
-          <View style={[styles.btn, styles.btnSecondary]}>
-            <Text style={[styles.btnText, styles.btnTextDark]}>History</Text>
-          </View>
+          <View style={[styles.btn, styles.btnPrimary]}><Text style={styles.btnText}>+ Add Meal</Text></View>
+          <View style={[styles.btn, styles.btnSecondary]}><Text style={[styles.btnText, styles.btnTextDark]}>History</Text></View>
         </View>
       </View>
 
@@ -40,7 +43,6 @@ let styles = StyleSheet.create(
   page: { padding: 16, gap: 16 },
   h1: { fontSize: 28, fontWeight: "800" },
   h2: { fontSize: 18, fontWeight: "700", marginBottom: 6 },
-
   section: { gap: 8 },
   row: { flexDirection: "row", gap: 12 },
 
