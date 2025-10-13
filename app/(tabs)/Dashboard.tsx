@@ -10,7 +10,29 @@ export default function DashboardScreen()
     { id: "m3", name: "Greek Yogurt + Berries", tags: ["Dairy"] }
   ]);
 
-  function toggleAllergen(a: any) {}
+  function toggleAllergen(a: any)
+  {
+    let found = false;
+    for (let i = 0; i < allergens.length; i++)
+    {
+      if (allergens[i] === a) { found = true; }
+    }
+
+    let out = [];
+    if (found)
+    {
+      for (let i = 0; i < allergens.length; i++)
+      {
+        if (allergens[i] !== a) { out.push(allergens[i]); }
+      }
+    }
+    else
+    {
+      for (let i = 0; i < allergens.length; i++) { out.push(allergens[i]); }
+      out.push(a);
+    }
+    setAllergens(out);
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
