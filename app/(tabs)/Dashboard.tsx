@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 export default function DashboardScreen()
 {
@@ -9,6 +9,8 @@ export default function DashboardScreen()
     { id: "m2", name: "PB&J Sandwich", tags: ["Peanuts"] },
     { id: "m3", name: "Greek Yogurt + Berries", tags: ["Dairy"] }
   ]);
+
+  function toggleAllergen(a: any) {}
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
@@ -24,7 +26,24 @@ export default function DashboardScreen()
 
       <View style={styles.section}>
         <Text style={styles.h2}>Your Allergens</Text>
-        <View style={styles.chips} />
+        <View style={styles.chips}>
+          {["Peanuts","Tree Nuts","Dairy","Eggs","Gluten","Soy","Fish","Shellfish"].map(function (a: any)
+          {
+            let active = false;
+            for (let i = 0; i < allergens.length; i++)
+            {
+              if (allergens[i] === a) { active = true; }
+            }
+            return (
+              <Pressable key={a} onPress={function () { toggleAllergen(a); }}>
+                <View style={[styles.chip, active ? styles.chipOn : styles.chipOff]}>
+                  <Text style={active ? styles.chipTextOn : styles.chipText}>{a}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.hint}>tap to toggle</Text>
       </View>
 
       <View style={styles.section}>
@@ -43,6 +62,7 @@ let styles = StyleSheet.create(
   page: { padding: 16, gap: 16 },
   h1: { fontSize: 28, fontWeight: "800" },
   h2: { fontSize: 18, fontWeight: "700", marginBottom: 6 },
+
   section: { gap: 8 },
   row: { flexDirection: "row", gap: 12 },
 
@@ -58,7 +78,6 @@ let styles = StyleSheet.create(
   chipOn: { backgroundColor: "#fde68a", borderColor: "#f59e0b" },
   chipText: { color: "#0f172a" },
   chipTextOn: { color: "#7c2d12", fontWeight: "700" },
-
   hint: { color: "#475569", fontSize: 12 },
 
   card: { backgroundColor: "#fff", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#e2e8f0", marginBottom: 8 },
