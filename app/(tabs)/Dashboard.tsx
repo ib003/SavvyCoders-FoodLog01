@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 export default function DashboardScreen()
 {
+  //simple data
   let [allergens, setAllergens] = useState(["Peanuts","Dairy","Gluten","Soy"]);
   let [recentMeals] = useState([
     { id: "m1", name: "Chicken Bowl", tags: ["Gluten-Free"] },
@@ -10,6 +11,7 @@ export default function DashboardScreen()
     { id: "m3", name: "Greek Yogurt + Berries", tags: ["Dairy"] }
   ]);
 
+  //toggle allergen by making a new list
   function toggleAllergen(a: any)
   {
     let found = false;
@@ -34,6 +36,7 @@ export default function DashboardScreen()
     setAllergens(out);
   }
 
+  //build warnings by checking tags vs allergens
   function getWarnings()
   {
     let list = [];
@@ -60,6 +63,7 @@ export default function DashboardScreen()
     <ScrollView contentContainerStyle={styles.page}>
       <Text style={styles.h1}>Dashboard</Text>
 
+      {/* quick actions */}
       <View style={styles.section}>
         <Text style={styles.h2}>Quick Actions</Text>
         <View style={styles.row}>
@@ -67,7 +71,7 @@ export default function DashboardScreen()
           <View style={[styles.btn, styles.btnSecondary]}><Text style={[styles.btnText, styles.btnTextDark]}>History</Text></View>
         </View>
       </View>
-
+      {/*allergens */}
       <View style={styles.section}>
         <Text style={styles.h2}>Your Allergens</Text>
         <View style={styles.chips}>
@@ -89,7 +93,7 @@ export default function DashboardScreen()
         </View>
         <Text style={styles.hint}>tap to toggle</Text>
       </View>
-
+      {/*recent meals */}
       <View style={styles.section}>
         <Text style={styles.h2}>Recent Meals</Text>
         {recentMeals.map(function (m: any)
@@ -102,7 +106,7 @@ export default function DashboardScreen()
           );
         })}
       </View>
-
+      {/*warnings */}
       <View style={styles.section}>
         <Text style={styles.h2}>Warnings</Text>
         {warnings.length === 0 ? (
@@ -110,6 +114,7 @@ export default function DashboardScreen()
         ) : (
           warnings.map(function (w: any)
           {
+            //list only tags that match allergens
             let badTags = [];
             for (let i = 0; i < w.tags.length; i++)
             {
