@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  meals     Meal[]
+}
+
+model Food {
+  id          String   @id @default(uuid())
+  name        String
+  brand       String?
+  servingUnit String?
+  servingQty  Float?
+  kcal        Float?
+  macros      Json?
+  barcodes    Barcode[]
+  items       MealItem[]
+}
+
+model Barcode {
+  upc    String @id
+  food   Food   @relation(fields: [foodId], references: [id])
+  foodId String
+}
+
+model Meal {
+  id         String    @id @default(uuid())
+  user       User      @relation(fields: [userId], references: [id])
+  userId     String
+  occurredAt DateTime
+  mealType   String
+  createdAt  DateTime  @default(now())
+  items      MealItem[]
+}
+
+model MealItem {
+  meal      Meal   @relation(fields: [mealId], references: [id])
+  mealId    String
+  food      Food   @relation(fields: [foodId], references: [id])
+  foodId    String
+  qty       Float
+  overrides Json?
+  @@id([mealId, foodId])
+}
