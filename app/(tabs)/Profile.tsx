@@ -28,7 +28,6 @@ export default function Profile() {
     "Halal",
     "Kosher",
     "Keto",
-    "Low FODMAP",
     "Lactose-free",
   ];
 
@@ -63,7 +62,7 @@ export default function Profile() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.title}>Profile</Text>
 
       <View style={styles.card}>
@@ -120,31 +119,32 @@ export default function Profile() {
 }
 
 const styles = StyleSheet.create({
+  scroll: { backgroundColor: "#FAFAFA" },
   container: { padding: 20, gap: 16 },
-  title: { fontSize: 28, fontWeight: "800" },
+  title: { fontSize: 28, fontWeight: "800", color: "#2E2E2E" },
   card: {
-    borderWidth: 1, borderColor: "#eee", borderRadius: 14, padding: 16
+    borderWidth: 1, borderColor: "#EDEDED", borderRadius: 14, padding: 16, backgroundColor: "#FFFFFF"
   },
-  label: { fontSize: 12, opacity: 0.6 },
-  value: { fontSize: 16, fontWeight: "600", marginTop: 4 },
-  sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 10 },
+  label: { fontSize: 12, color: "#A6A6A6" },
+  value: { fontSize: 16, fontWeight: "600", marginTop: 4, color: "#2E2E2E" },
+  sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 10, color: "#2E2E2E" },
   chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#ddd",
-    backgroundColor: "#fff"
+    borderColor: "#A6A6A6",
+    backgroundColor: "#FFFFFF"
   },
   chipActive: {
-    backgroundColor: "#1f7a8c",
-    borderColor: "#1f7a8c"
+    backgroundColor: "#5DBB63",
+    borderColor: "#5DBB63"
   },
-  chipText: { color: "#222", fontWeight: "600" },
+  chipText: { color: "#2E2E2E", fontWeight: "600" },
   chipTextActive: { color: "#fff" },
-  btn: { backgroundColor: "#d17575ff", padding: 14, borderRadius: 12, alignItems: "center" },
+  btn: { backgroundColor: "#5DBB63", padding: 14, borderRadius: 12, alignItems: "center" },
   btnText: { color: "white", fontWeight: "700" },
-  btnSecondary: { backgroundColor: "#eee", padding: 14, borderRadius: 12, alignItems: "center" },
-  btnSecondaryText: { color: "#333", fontWeight: "700" },
+  btnSecondary: { backgroundColor: "#d17575ff", padding: 14, borderRadius: 12, alignItems: "center" },
+  btnSecondaryText: { color: "#FFFFFF", fontWeight: "700" },
 });

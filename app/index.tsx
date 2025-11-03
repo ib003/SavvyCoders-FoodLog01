@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 export default function Login() {
   const router = useRouter();
@@ -58,15 +58,15 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 24, gap: 14 },
-  title: { fontSize: 32, fontWeight: "800", textAlign: "center" },
-  subtitle: { textAlign: "center", opacity: 0.7, marginBottom: 12 },
+  container: { flex: 1, justifyContent: "center", padding: 24, gap: 14, backgroundColor: "#FAFAFA" },
+  title: { fontSize: 32, fontWeight: "800", textAlign: "center", color: "#2E2E2E" },
+  subtitle: { textAlign: "center", color: "#A6A6A6", marginBottom: 12 },
   input: {
-    borderWidth: 1, borderColor: "#ddd", borderRadius: 12, padding: 12
+    borderWidth: 1, borderColor: "#A6A6A6", borderRadius: 12, padding: 12, backgroundColor: "#FFFFFF", color: "#2E2E2E"
   },
   btn: {
-    backgroundColor: "#3b82f6", padding: 14, borderRadius: 12, alignItems: "center"
+    backgroundColor: "#5DBB63", padding: 14, borderRadius: 12, alignItems: "center"
   },
   btnText: { color: "white", fontWeight: "700" },
-  hint: { fontSize: 12, textAlign: "center", opacity: 0.6, marginTop: 4 },
+  hint: { fontSize: 12, textAlign: "center", color: "#A6A6A6", marginTop: 4 },
 });

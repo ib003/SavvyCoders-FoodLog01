@@ -1,6 +1,6 @@
+import { Href, useRouter } from "expo-router";
 import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
-import { useRouter, Href } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export default function AddMealTab() {
   const router = useRouter();
@@ -26,9 +26,9 @@ export default function AddMealTab() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, padding: 16 },
-  title: { fontSize: 28, fontWeight: "800" },
-  sub: { marginTop: 4, color: "#475569" },
-  item: { backgroundColor: "#f5f5f7", padding: 16, borderRadius: 12, borderWidth: 1, borderColor: "#e5e7eb" },
-  itemText: { fontSize: 16, fontWeight: "700" },
+  wrap: { flex: 1, padding: 16, backgroundColor: "#FAFAFA" },
+  title: { fontSize: 28, fontWeight: "800", color: "#2E2E2E" },
+  sub: { marginTop: 4, color: "#A6A6A6" },
+  item: { backgroundColor: "#FFFFFF", padding: 16, borderRadius: 12, borderWidth: 1, borderColor: "#EDEDED" },
+  itemText: { fontSize: 16, fontWeight: "700", color: "#2E2E2E" },
 });
