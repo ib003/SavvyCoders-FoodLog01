@@ -1,9 +1,9 @@
-import React from "react";
+import { useClientOnlyValue } from "@/components/useClientOnlyValue";
+import { useColorScheme } from "@/components/useColorScheme";
+import Colors from "@/constants/Colors";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Tabs } from "expo-router";
-import Colors from "@/constants/Colors";
-import { useColorScheme } from "@/components/useColorScheme";
-import { useClientOnlyValue } from "@/components/useClientOnlyValue";
+import React from "react";
 
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>["name"];
@@ -21,7 +21,15 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
         headerShown: useClientOnlyValue(false, true),
       }}
+      initialRouteName="Dashboard"
     >
+      <Tabs.Screen
+        name="index"
+        options={{
+          href: null, // Hide from tab bar
+        }}
+      />
+
       <Tabs.Screen
         name="Dashboard"
         options={{
@@ -43,6 +51,22 @@ export default function TabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
+        }}
+      />
+
+      <Tabs.Screen
+        name="AllergenWarning"
+        options={{
+          title: "Alerts",
+          tabBarIcon: ({ color }) => <TabBarIcon name="exclamation-triangle" color={color} />,
+        }}
+      />
+
+      <Tabs.Screen
+        name="AllergiesPreferences"
+        options={{
+          href: null, // Hide from tab bar
+          headerShown: false,
         }}
       />
     </Tabs>
