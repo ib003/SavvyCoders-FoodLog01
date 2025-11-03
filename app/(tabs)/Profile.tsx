@@ -9,6 +9,7 @@ export default function Profile() {
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
   const [selectedDietTags, setSelectedDietTags] = useState<string[]>([]);
 
+  //list of available allergen options
   const ALLERGENS = [
     "Peanuts",
     "Tree Nuts",
@@ -21,6 +22,7 @@ export default function Profile() {
     "Sesame",
   ];
 
+  //list of available dietary tag options
   const DIET_TAGS = [
     "Vegan",
     "Vegetarian",
@@ -35,6 +37,7 @@ export default function Profile() {
     (async () => {
       const saved = await AsyncStorage.getItem("user_email");
       setEmail(saved);
+      //load saved allergens and diet tags from storage
       const a = await AsyncStorage.getItem("user_allergens");
       const d = await AsyncStorage.getItem("user_diet_tags");
       if (a) setSelectedAllergens(JSON.parse(a));
@@ -47,6 +50,7 @@ export default function Profile() {
     router.replace("/");
   };
 
+  //toggle allergen or diet tag selection
   const toggleItem = (current: string[], value: string, setter: (v: string[]) => void) => {
     if (current.includes(value)) {
       setter(current.filter(v => v !== value));
@@ -55,6 +59,7 @@ export default function Profile() {
     }
   };
 
+  //save user preferences to local storage
   const onSavePrefs = async () => {
     await AsyncStorage.setItem("user_allergens", JSON.stringify(selectedAllergens));
     await AsyncStorage.setItem("user_diet_tags", JSON.stringify(selectedDietTags));
@@ -73,6 +78,7 @@ export default function Profile() {
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Allergies & Intolerances</Text>
         <View style={styles.chipsWrap}>
+          {/*load allergen chips with active state*/}
           {ALLERGENS.map(item => {
             const active = selectedAllergens.includes(item);
             return (
@@ -91,6 +97,7 @@ export default function Profile() {
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Dietary Tags</Text>
         <View style={styles.chipsWrap}>
+          {/*load dietary tag chips with active state*/}
           {DIET_TAGS.map(item => {
             const active = selectedDietTags.includes(item);
             return (

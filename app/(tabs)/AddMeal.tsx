@@ -20,6 +20,7 @@ export default function AddMealTab() {
         <Option label="Search" to="/add/search" />
         <Option label="Pick from Saved Items" to="/add/saved" />
         <Option label="Barcode Scan" to="/add/barcode" />
+        <Option label="Photo Log" to="/add/photo" />
       </View>
     </View>
   );
