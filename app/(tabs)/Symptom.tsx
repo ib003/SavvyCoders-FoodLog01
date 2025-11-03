@@ -3,11 +3,15 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 
 export default function Symptom() {
   const [physicalSymptoms, setPhysicalSymptoms] = useState<string[]>([]);
+  const [mentalSymptoms, setMentalSymptoms] = useState<string[]>([]);
   const [whenStarted, setWhenStarted] = useState("");
   const [severity, setSeverity] = useState("");
 
   // list of food-related physical symptoms
   const PHYSICAL_SYMPTOMS = ["Bloating", "Stomach pain", "Gas", "Nausea", "Heartburn", "Indigestion", "Constipation", "Diarrhea", "Fatigue"];
+
+  // list of food-related mental symptoms
+  const MENTAL_SYMPTOMS = ["Brain fog", "Low energy", "Difficulty concentrating", "Mood swings", "Irritability"];
 
   // toggle symptom selection
   function toggleSymptom(current: string[], value: string, setter: (v: string[]) => void) {
@@ -55,6 +59,25 @@ export default function Symptom() {
               <Pressable
                 key={item}
                 onPress={() => toggleSymptom(physicalSymptoms, item, setPhysicalSymptoms)}
+                style={active ? styles.chipActive : styles.chip}
+              >
+                <Text style={active ? styles.chipTextActive : styles.chipText}>{item}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.h2}>Mental symptoms</Text>
+        <Text style={styles.hint}>tap to select</Text>
+        <View style={styles.chipsWrap}>
+          {MENTAL_SYMPTOMS.map(item => {
+            const active = mentalSymptoms.includes(item);
+            return (
+              <Pressable
+                key={item}
+                onPress={() => toggleSymptom(mentalSymptoms, item, setMentalSymptoms)}
                 style={active ? styles.chipActive : styles.chip}
               >
                 <Text style={active ? styles.chipTextActive : styles.chipText}>{item}</Text>
