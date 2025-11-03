@@ -36,29 +36,8 @@ export default function AddPhoto() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: "#FAFAFA",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#2E2E2E",
-  },
-  btn: {
-    backgroundColor: "#5DBB63",
-    padding: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    minWidth: 200,
-  },
-  btnText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 16,
-  },
+  container: { flex: 1, padding: 16, backgroundColor: "#FAFAFA", justifyContent: "center", alignItems: "center", gap: 20 },
+  title: { fontSize: 28, fontWeight: "800", color: "#2E2E2E" },
+  btn: { backgroundColor: "#5DBB63", padding: 14, borderRadius: 12, alignItems: "center", minWidth: 200 },
+  btnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 16 },
 });

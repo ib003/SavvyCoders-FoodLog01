@@ -129,27 +129,15 @@ const styles = StyleSheet.create({
   scroll: { backgroundColor: "#FAFAFA" },
   container: { padding: 20, gap: 16 },
   title: { fontSize: 28, fontWeight: "800", color: "#2E2E2E" },
-  card: {
-    borderWidth: 1, borderColor: "#EDEDED", borderRadius: 14, padding: 16, backgroundColor: "#FFFFFF"
-  },
+  card: { borderWidth: 1, borderColor: "#EDEDED", borderRadius: 14, padding: 16, backgroundColor: "#FFFFFF" },
   label: { fontSize: 12, color: "#A6A6A6" },
   value: { fontSize: 16, fontWeight: "600", marginTop: 4, color: "#2E2E2E" },
   sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 10, color: "#2E2E2E" },
   chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#A6A6A6",
-    backgroundColor: "#FFFFFF"
-  },
-  chipActive: {
-    backgroundColor: "#5DBB63",
-    borderColor: "#5DBB63"
-  },
-  chipText: { color: "#2E2E2E", fontWeight: "600" },
-  chipTextActive: { color: "#fff" },
+  chip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: "#A6A6A6", backgroundColor: "#FFFFFF" },
+  chipActive: { backgroundColor: "#5DBB63", borderColor: "#5DBB63" },
+  chipText: { color: "#2E2E2E", fontWeight: "600", lineHeight: 20 },
+  chipTextActive: { color: "#fff", lineHeight: 20 },
   btn: { backgroundColor: "#5DBB63", padding: 14, borderRadius: 12, alignItems: "center" },
   btnText: { color: "white", fontWeight: "700" },
   btnSecondary: { backgroundColor: "#d17575ff", padding: 14, borderRadius: 12, alignItems: "center" },

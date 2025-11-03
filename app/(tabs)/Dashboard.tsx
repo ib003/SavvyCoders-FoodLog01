@@ -157,8 +157,8 @@ let styles = StyleSheet.create(
   chip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1 },
   chipOff: { backgroundColor: "#FFFFFF", borderColor: "#A6A6A6" },
   chipOn: { backgroundColor: "#5DBB63", borderColor: "#5DBB63" },
-  chipText: { color: "#2E2E2E" },
-  chipTextOn: { color: "#FFFFFF", fontWeight: "700" },
+  chipText: { color: "#2E2E2E", lineHeight: 20 },
+  chipTextOn: { color: "#FFFFFF", fontWeight: "700", lineHeight: 20 },
   hint: { color: "#A6A6A6", fontSize: 12 },
 
   card: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#EDEDED", marginBottom: 8 },
