@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 export default function Symptom() {
   const [physicalSymptoms, setPhysicalSymptoms] = useState<string[]>([]);
@@ -20,6 +20,17 @@ export default function Symptom() {
     } else {
       setter([...current, value]);
     }
+  }
+
+  // basic suggestions alert
+  function showSuggestions() {
+    const allSymptoms = [...physicalSymptoms, ...mentalSymptoms];
+    if (allSymptoms.length === 0) {
+      Alert.alert("No symptoms", "Please select at least one symptom");
+      return;
+    }
+
+    Alert.alert("Food suggestions", "Track your symptoms and meals to identify patterns");
   }
 
   return (
@@ -87,7 +98,7 @@ export default function Symptom() {
         </View>
       </View>
 
-      <Pressable style={styles.btn} onPress={() => {}}>
+      <Pressable style={styles.btn} onPress={showSuggestions}>
         <Text style={styles.btnText}>Get food suggestions</Text>
       </Pressable>
     </ScrollView>
