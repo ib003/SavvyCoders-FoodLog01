@@ -2,8 +2,21 @@ import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 export default function Symptom() {
+  const [physicalSymptoms, setPhysicalSymptoms] = useState<string[]>([]);
   const [whenStarted, setWhenStarted] = useState("");
   const [severity, setSeverity] = useState("");
+
+  // list of food-related physical symptoms
+  const PHYSICAL_SYMPTOMS = ["Bloating", "Stomach pain", "Gas", "Nausea", "Heartburn", "Indigestion", "Constipation", "Diarrhea", "Fatigue"];
+
+  // toggle symptom selection
+  function toggleSymptom(current: string[], value: string, setter: (v: string[]) => void) {
+    if (current.includes(value)) {
+      setter(current.filter(v => v !== value));
+    } else {
+      setter([...current, value]);
+    }
+  }
 
   return (
     <ScrollView style={styles.bg} contentContainerStyle={styles.page}>
@@ -32,6 +45,25 @@ export default function Symptom() {
         />
       </View>
 
+      <View style={styles.card}>
+        <Text style={styles.h2}>Physical symptoms</Text>
+        <Text style={styles.hint}>tap to select</Text>
+        <View style={styles.chipsWrap}>
+          {PHYSICAL_SYMPTOMS.map(item => {
+            const active = physicalSymptoms.includes(item);
+            return (
+              <Pressable
+                key={item}
+                onPress={() => toggleSymptom(physicalSymptoms, item, setPhysicalSymptoms)}
+                style={active ? styles.chipActive : styles.chip}
+              >
+                <Text style={active ? styles.chipTextActive : styles.chipText}>{item}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
       <Pressable style={styles.btn} onPress={() => {}}>
         <Text style={styles.btnText}>Get food suggestions</Text>
       </Pressable>
@@ -44,6 +76,7 @@ const styles = StyleSheet.create({
   page: { padding: 16, gap: 16 },
   h1: { fontSize: 28, fontWeight: "800", color: "#2E2E2E" },
   h2: { fontSize: 16, fontWeight: "700", marginBottom: 8, color: "#2E2E2E" },
+  hint: { fontSize: 12, color: "#A6A6A6", marginBottom: 8 },
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
@@ -60,6 +93,25 @@ const styles = StyleSheet.create({
     color: "#2E2E2E",
     marginTop: 8
   },
+  chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  chip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#A6A6A6",
+    backgroundColor: "#FFFFFF"
+  },
+  chipActive: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    backgroundColor: "#5DBB63",
+    borderColor: "#5DBB63"
+  },
+  chipText: { color: "#2E2E2E", fontWeight: "600", lineHeight: 20 },
+  chipTextActive: { color: "#fff", fontWeight: "600", lineHeight: 20 },
   btn: {
     backgroundColor: "#5DBB63",
     padding: 14,
