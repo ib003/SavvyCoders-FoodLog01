@@ -4,10 +4,11 @@ import { auth } from "@/app/lib/auth";
 import { preferences } from "@/app/lib/preferences";
 import { Symptom, symptoms } from "@/app/lib/symptoms";
 import AllergenWarning from "@/components/AllergenWarning";
+import NutritionInsights from "@/components/NutritionInsights";
 import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface Meal {
@@ -45,11 +46,10 @@ export default function DashboardScreen() {
   const [todaySymptoms, setTodaySymptoms] = useState<Symptom[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
 
-  // Check authentication on mount (but allow dev mode bypass)
+  //check authentication on mount
   useEffect(() => {
     const checkAuthAndLoad = async () => {
       const isAuth = await auth.isAuthenticated();
-      // In dev mode, isAuthenticated returns true, so this won't redirect
       if (!isAuth) {
         router.replace("/");
         return;
@@ -58,6 +58,13 @@ export default function DashboardScreen() {
     };
     checkAuthAndLoad();
   }, []);
+
+  //refresh symptoms when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadTodaySymptoms();
+    }, [])
+  );
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -98,9 +105,9 @@ export default function DashboardScreen() {
     const alertsList: AlertItem[] = [];
 
     for (const meal of meals) {
-      // Collect all food tags/names for this meal
+      //collect all food tags/names for this meal
       const foodNames = meal.items.map(item => item.food.name);
-      // For now, we'll use food names as tags - in production, you'd have actual allergen tags
+      //for now we use food names as tags - in production you would have actual allergen tags
       const analysis = await analyzeFood(foodNames, userPrefs);
       
       if (analysis.hasAllergenWarning || analysis.hasDietaryConflict) {
@@ -120,6 +127,16 @@ export default function DashboardScreen() {
       setTodaySymptoms(symptomsList);
     } catch (error) {
       console.error("Failed to load symptoms:", error);
+    }
+  };
+
+  const handleRemoveSymptom = async (symptomId: string) => {
+    try {
+      await symptoms.removeSymptom(symptomId);
+      await loadTodaySymptoms();
+    } catch (error) {
+      console.error("Failed to remove symptom:", error);
+      Alert.alert("Error", "Failed to remove symptom");
     }
   };
 
@@ -323,6 +340,13 @@ export default function DashboardScreen() {
                   >
                     <Text style={styles.severityText}>{symptom.severity}</Text>
                   </View>
+                  <TouchableOpacity
+                    onPress={() => handleRemoveSymptom(symptom.id)}
+                    style={styles.removeSymptomButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <FontAwesome name="times" size={12} color={Colors.neutral.mutedGray} />
+                  </TouchableOpacity>
                 </View>
               ))}
             </View>
@@ -330,16 +354,16 @@ export default function DashboardScreen() {
 
           <TouchableOpacity
             style={styles.addSymptomButton}
-            onPress={() => {
-              // TODO: Open symptom input modal
-              Alert.alert("Add Symptom", "Feature coming soon!");
-            }}
+            onPress={() => router.push("/symptom")}
             activeOpacity={0.8}
           >
             <FontAwesome name="plus" size={16} color={Colors.primary.green} style={{ marginRight: 8 }} />
             <Text style={styles.addSymptomText}>Add Symptom</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Nutrition Insights */}
+        <NutritionInsights />
 
         {/* Summary Stats */}
         <View style={styles.statsContainer}>
@@ -613,6 +637,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: Colors.primary.green,
+  },
+  removeSymptomButton: {
+    marginLeft: 8,
+    padding: 4,
   },
   // Empty States
   emptyCard: {

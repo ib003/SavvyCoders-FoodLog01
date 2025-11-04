@@ -35,6 +35,20 @@ export default function AddLayout() {
           headerBackTitle: "Back",
         }} 
       />
+      <Stack.Screen 
+        name="symptom" 
+        options={{ 
+          title: "Symptom Log",
+          headerBackTitle: "Back",
+        }} 
+      />
+      <Stack.Screen 
+        name="photo" 
+        options={{ 
+          title: "Photo Log",
+          headerBackTitle: "Back",
+        }} 
+      />
     </Stack>
   );
 }
