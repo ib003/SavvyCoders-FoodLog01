@@ -1,0 +1,46 @@
+import React, { useState } from "react";
+type profileInfo = {
+    username: string;
+    name: string;
+    email: string;
+    phoneNumber: string;
+    age: number;
+    allergies: string[];
+    dietaryPreferences: string[];
+};
+let username: string = "";
+let name: string = "";
+let email: string = "";
+let phoneNumber: string = "";
+let age: number = 0;
+let allergies: string[] = [];
+let dietaryPreferences: string[] = [];
+export function setProfileInfo(
+    usernameInput: string,
+    nameInput: string,
+    emailInput: string,
+    phoneNumberInput: string,
+    ageInput: number,
+    allergiesInput: string[],
+    dietaryPreferencesInput: string[]
+) {
+    username = usernameInput;
+    name = nameInput;
+    email = emailInput;
+    phoneNumber = phoneNumberInput;
+    age = ageInput;
+    allergies = allergiesInput;
+    dietaryPreferences = dietaryPreferencesInput;
+}
+export function getProfileInfo(): profileInfo {
+    return {
+        username,
+        name,
+        email,
+        phoneNumber,
+        age,
+        allergies,
+        dietaryPreferences,
+    };
+}
+
