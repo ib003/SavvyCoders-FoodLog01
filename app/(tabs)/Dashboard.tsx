@@ -9,7 +9,7 @@ import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface Meal {
   id: string;
@@ -127,6 +127,16 @@ export default function DashboardScreen() {
       setTodaySymptoms(symptomsList);
     } catch (error) {
       console.error("Failed to load symptoms:", error);
+    }
+  };
+
+  const handleRemoveSymptom = async (symptomId: string) => {
+    try {
+      await symptoms.removeSymptom(symptomId);
+      await loadTodaySymptoms();
+    } catch (error) {
+      console.error("Failed to remove symptom:", error);
+      Alert.alert("Error", "Failed to remove symptom");
     }
   };
 
@@ -330,6 +340,13 @@ export default function DashboardScreen() {
                   >
                     <Text style={styles.severityText}>{symptom.severity}</Text>
                   </View>
+                  <TouchableOpacity
+                    onPress={() => handleRemoveSymptom(symptom.id)}
+                    style={styles.removeSymptomButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <FontAwesome name="times" size={12} color={Colors.neutral.mutedGray} />
+                  </TouchableOpacity>
                 </View>
               ))}
             </View>
@@ -620,6 +637,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: Colors.primary.green,
+  },
+  removeSymptomButton: {
+    marginLeft: 8,
+    padding: 4,
   },
   // Empty States
   emptyCard: {
