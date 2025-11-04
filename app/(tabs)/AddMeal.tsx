@@ -92,6 +92,15 @@ export default function AddMealTab() {
         />
         
         <OptionCard
+          icon="camera"
+          iconColor={Colors.primary.orange}
+          iconBg={`${Colors.primary.orange}15`}
+          title="Add Photo"
+          description="Take a photo of your meal to log it"
+          to="/add/photo"
+        />
+        
+        <OptionCard
           icon="edit"
           iconColor={Colors.neutral.mutedGray}
           iconBg={`${Colors.neutral.mutedGray}15`}

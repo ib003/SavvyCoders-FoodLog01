@@ -330,10 +330,7 @@ export default function DashboardScreen() {
 
           <TouchableOpacity
             style={styles.addSymptomButton}
-            onPress={() => {
-              // TODO: Open symptom input modal
-              Alert.alert("Add Symptom", "Feature coming soon!");
-            }}
+            onPress={() => router.push("/add/symptom")}
             activeOpacity={0.8}
           >
             <FontAwesome name="plus" size={16} color={Colors.primary.green} style={{ marginRight: 8 }} />
