@@ -4,6 +4,7 @@ import { auth } from "@/app/lib/auth";
 import { preferences } from "@/app/lib/preferences";
 import { Symptom, symptoms } from "@/app/lib/symptoms";
 import AllergenWarning from "@/components/AllergenWarning";
+import NutritionInsights from "@/components/NutritionInsights";
 import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -104,9 +105,9 @@ export default function DashboardScreen() {
     const alertsList: AlertItem[] = [];
 
     for (const meal of meals) {
-      // Collect all food tags/names for this meal
+      //collect all food tags/names for this meal
       const foodNames = meal.items.map(item => item.food.name);
-      // For now, we'll use food names as tags - in production, you'd have actual allergen tags
+      //for now we use food names as tags - in production you would have actual allergen tags
       const analysis = await analyzeFood(foodNames, userPrefs);
       
       if (analysis.hasAllergenWarning || analysis.hasDietaryConflict) {
@@ -343,6 +344,9 @@ export default function DashboardScreen() {
             <Text style={styles.addSymptomText}>Add Symptom</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Nutrition Insights */}
+        <NutritionInsights />
 
         {/* Summary Stats */}
         <View style={styles.statsContainer}>
