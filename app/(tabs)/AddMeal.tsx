@@ -70,7 +70,7 @@ export default function AddMealTab() {
           iconBg={`${Colors.primary.green}15`}
           title="Search Database"
           description="Search from thousands of foods in our database"
-          to="/add/search"
+          to="/search"
         />
         
         <OptionCard
@@ -79,7 +79,7 @@ export default function AddMealTab() {
           iconBg={`${Colors.primary.orange}15`}
           title="Saved Foods"
           description="Quickly add from your frequently used items"
-          to="/add/saved"
+          to="/saved"
         />
         
         <OptionCard
@@ -88,7 +88,7 @@ export default function AddMealTab() {
           iconBg={`${Colors.primary.yellow}15`}
           title="Barcode Scan"
           description="Scan barcodes to check product safety instantly"
-          to="/add/barcode"
+          to="/barcode"
         />
         
         <OptionCard
@@ -106,7 +106,7 @@ export default function AddMealTab() {
           iconBg={`${Colors.neutral.mutedGray}15`}
           title="Manual Entry"
           description="Create a custom meal entry manually"
-          to="/add/search"
+          to="/search"
         />
       </View>
 
