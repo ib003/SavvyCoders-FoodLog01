@@ -4,7 +4,7 @@ import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function Profile() {
   const router = useRouter();
@@ -72,6 +72,17 @@ export default function Profile() {
         },
       ]
     );
+  };
+
+  const handleContactSupport = () => {
+    const email = "mocksupport@foodlogapp.com";
+    const subject = "App Support Request";
+    const body = "Hello,\n\nI need help with:\n\n";
+    const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    
+    Linking.openURL(mailtoUrl).catch(() => {
+      Alert.alert("Error", "Unable to open email client. Please contact us at mocksupport@foodlogapp.com");
+    });
   };
 
   return (
@@ -216,6 +227,16 @@ export default function Profile() {
             <FontAwesome name="sign-out" size={18} color="#FFFFFF" />
             <Text style={styles.logoutButtonText}>Sign Out</Text>
           </View>
+        </TouchableOpacity>
+
+        {/* Contact Support Link */}
+        <TouchableOpacity 
+          style={styles.supportLink} 
+          onPress={handleContactSupport}
+          activeOpacity={0.7}
+        >
+          <FontAwesome name="envelope" size={16} color={Colors.primary.green} style={{ marginRight: 8 }} />
+          <Text style={styles.supportLinkText}>Contact Support</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -453,4 +474,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.5,
   },
+  //contact support
+  supportLink: { flexDirection: "row", alignItems: "center",justifyContent: "center", marginHorizontal: 20, marginTop: 16, marginBottom: 32, paddingVertical: 12 },
+  supportLinkText: { fontSize: 14, fontWeight: "600", color: Colors.primary.green,},
 });
