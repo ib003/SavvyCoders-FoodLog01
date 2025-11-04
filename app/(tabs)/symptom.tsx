@@ -66,12 +66,25 @@ export default function Symptom() {
         }
       }
       
-      if (duplicates.length > 0) {
-        Alert.alert("Duplicate symptoms", `${duplicates.join(", ")} already logged today. Only new symptoms will be saved.`);
+      if (newSymptoms.length === 0) {
+        Alert.alert("No new symptoms", `All selected symptoms (${duplicates.join(", ")}) have already been logged today`, [{ text: "OK", onPress: () => router.replace("/Dashboard") }]);
+        return;
       }
       
-      if (newSymptoms.length === 0) {
-        Alert.alert("No new symptoms", "All selected symptoms have already been logged today");
+      if (duplicates.length > 0) {
+        Alert.alert("Duplicate symptoms detected", `${duplicates.join(", ")} already logged today. Only new symptoms will be saved.`, [
+          { text: "Cancel", style: "cancel" },
+          { text: "Continue", onPress: async () => {
+            const severityLevel = severity ? getSeverityLevel() : "mild";
+            const notes = whenStarted ? `Started: ${whenStarted}` : undefined;
+            
+            for (const symptomName of newSymptoms) {
+              await symptoms.addSymptom(symptomName, severityLevel, notes);
+            }
+            
+            Alert.alert("Saved", `${newSymptoms.length} symptom(s) logged successfully`, [{ text: "OK", onPress: () => router.replace("/Dashboard") }]);
+          }}
+        ]);
         return;
       }
       
@@ -82,7 +95,7 @@ export default function Symptom() {
         await symptoms.addSymptom(symptomName, severityLevel, notes);
       }
       
-      Alert.alert("Saved", `${newSymptoms.length} symptom(s) logged successfully`, [{ text: "OK", onPress: () => router.back() }]);
+      Alert.alert("Saved", `${newSymptoms.length} symptom(s) logged successfully`, [{ text: "OK", onPress: () => router.replace("/Dashboard") }]);
     } catch (error) {
       Alert.alert("Error", "Failed to save symptoms");
     }

@@ -20,6 +20,7 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
         headerShown: useClientOnlyValue(false, true),
+        tabBarStyle: { display: "flex" },
       }}
       initialRouteName="Dashboard"
     >
@@ -65,7 +66,27 @@ export default function TabLayout() {
       <Tabs.Screen
         name="AllergiesPreferences"
         options={{
-          href: null, // Hide from tab bar
+          href: null,
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="add"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="symptom"
+        options={{
+          href: null,
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="photo"
+        options={{
+          href: null,
           headerShown: false,
         }}
       />

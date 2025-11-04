@@ -97,7 +97,7 @@ export default function AddMealTab() {
           iconBg={`${Colors.primary.orange}15`}
           title="Add Photo"
           description="Take a photo of your meal to log it"
-          to="/add/photo"
+          to="/photo"
         />
         
         <OptionCard

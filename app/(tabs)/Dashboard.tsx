@@ -6,9 +6,9 @@ import { Symptom, symptoms } from "@/app/lib/symptoms";
 import AllergenWarning from "@/components/AllergenWarning";
 import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface Meal {
   id: string;
@@ -45,11 +45,10 @@ export default function DashboardScreen() {
   const [todaySymptoms, setTodaySymptoms] = useState<Symptom[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
 
-  // Check authentication on mount (but allow dev mode bypass)
+  //check authentication on mount
   useEffect(() => {
     const checkAuthAndLoad = async () => {
       const isAuth = await auth.isAuthenticated();
-      // In dev mode, isAuthenticated returns true, so this won't redirect
       if (!isAuth) {
         router.replace("/");
         return;
@@ -58,6 +57,13 @@ export default function DashboardScreen() {
     };
     checkAuthAndLoad();
   }, []);
+
+  //refresh symptoms when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadTodaySymptoms();
+    }, [])
+  );
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -330,7 +336,7 @@ export default function DashboardScreen() {
 
           <TouchableOpacity
             style={styles.addSymptomButton}
-            onPress={() => router.push("/add/symptom")}
+            onPress={() => router.push("/symptom")}
             activeOpacity={0.8}
           >
             <FontAwesome name="plus" size={16} color={Colors.primary.green} style={{ marginRight: 8 }} />
