@@ -181,12 +181,12 @@ ingredients: []
 
 try
 {
-//this is the prompt i give ChatGPT to get the estimate
+//this is the prompt i give ChatGPT to get the estimate  
 const promptText = "you see a photo of food. estimate the dish name, total calories, grams of protein, grams of carbs, grams of fat, and a short list of ingredients. respond only with json using keys name, calories, protein, carbs, fat, ingredients where ingredients is an array of strings"
 
 const aiRes = await openai.responses.create({
 //using older model cause it's free
-  model: "gpt-4.1-mini",
+model: "gpt-4.1-mini",
 input: [
 {
 role: "user",
@@ -254,17 +254,8 @@ ingredients: Array.isArray(result.ingredients) ? result.ingredients : []
 }
 }
 
-const food =
-{
-name: result.name,
-calories: result.calories,
-protein: result.protein,
-carbs: result.carbs,
-fat: result.fat,
-ingredients: result.ingredients
-}
-
 //TODO: write a function save food data to database
+//this function still is a placeholder and does nothing, even when i remove "food"
 async function saveFood(food)
 {
 if (!food)
