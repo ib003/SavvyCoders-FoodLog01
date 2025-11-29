@@ -167,6 +167,9 @@ let result =
 {
 name: "unknown food",
 calories: 0,
+protein: 0,
+carbs: 0,
+fat: 0,
 ingredients: []
 }
 
@@ -186,6 +189,9 @@ return null
 return {
 name: result.name || "unknown",
 calories: result.calories || 0,
+protein: result.protein || 0,
+carbs: result.carbs || 0,
+fat: result.fat || 0,
 ingredients: result.ingredients || []
 }
 }
@@ -194,6 +200,9 @@ const food =
 {
 name: result.name,
 calories: result.calories,
+protein: result.protein,
+carbs: result.carbs,
+fat: result.fat,
 ingredients: result.ingredients
 }
 
