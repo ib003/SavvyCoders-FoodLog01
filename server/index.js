@@ -150,6 +150,19 @@ app.get("/meals", auth, async (req, res) => {
   res.json(meals);
 });
 
+// --- AI Food Analysis ---
+app.post("/api/analyze-food", async (req, res) =>
+{
+const image = req.body.image
+
+if (!image)
+{
+return res.status(400).json({ error: "missing image" })
+}
+
+res.json({ message: "analyze route working" })
+})
+
 // --- User Preferences ---
 app.get("/user/preferences", auth, async (req, res) => {
   const user = await prisma.user.findUnique({
