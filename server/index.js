@@ -168,7 +168,65 @@ calories: 0,
 ingredients: []
 }
 
-res.json(result)
+if (!result || !result.name)
+{
+return res.status(500).json({ error: "ai failed to analyze image" })
+}
+
+//TODO: write a function to decipher the AI output and make sure we can pass it to food
+function normalizeFood(result)
+{
+if (!result)
+{
+return null
+}
+
+return {
+name: result.name || "unknown",
+calories: result.calories || 0,
+ingredients: result.ingredients || []
+}
+}
+
+const food =
+{
+name: result.name,
+calories: result.calories,
+ingredients: result.ingredients
+}
+
+//TODO: write a function save food data to database
+async function saveFood(food)
+{
+if (!food)
+{
+return null
+}
+
+let saved = null
+
+try
+{
+saved = await prisma.food.create({
+data:
+{
+name: food.name,
+calories: food.calories
+}
+})
+}
+catch
+{
+return null
+}
+
+return saved
+}
+
+const clean = normalizeFood(result)
+const saved = await saveFood(clean)
+
+res.json(saved || clean)
 })
 
 // --- User Preferences ---
