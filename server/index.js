@@ -160,7 +160,15 @@ if (!image)
 return res.status(400).json({ error: "missing image" })
 }
 
-res.json({ message: "analyze route working" })
+//TODO: send image to chatgpt api and receive analysis result
+let result =
+{
+name: "unknown food",
+calories: 0,
+ingredients: []
+}
+
+res.json(result)
 })
 
 // --- User Preferences ---
