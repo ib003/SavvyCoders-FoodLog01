@@ -162,6 +162,12 @@ if (!image)
 return res.status(400).json({ error: "missing image" })
 }
 
+let dataUrl = image
+if (!dataUrl.startsWith("data:"))
+{
+dataUrl = "data:image/jpeg;base64," + dataUrl
+}
+
 //TODO: send image to chatgpt api and receive analysis result
 let result =
 {
@@ -173,6 +179,58 @@ fat: 0,
 ingredients: []
 }
 
+try
+{
+//this is the prompt i give ChatGPT to get the estimate
+const promptText = "you see a photo of food. estimate the dish name, total calories, grams of protein, grams of carbs, grams of fat, and a short list of ingredients. respond only with json using keys name, calories, protein, carbs, fat, ingredients where ingredients is an array of strings"
+
+const aiRes = await openai.responses.create({
+//using older model cause it's free
+  model: "gpt-4.1-mini",
+input: [
+{
+role: "user",
+content: [
+{ type: "input_text", text: promptText },
+{ type: "input_image", image_url: dataUrl }
+]
+}
+],
+response_format: { type: "json_object" }
+})
+
+let aiText = null
+
+//this if statement checks if the output i got from ChatGPT is in the right format/is usable
+if (aiRes && aiRes.output && aiRes.output[0] && aiRes.output[0].content && aiRes.output[0].content[0] && aiRes.output[0].content[0].text)
+{
+aiText = aiRes.output[0].content[0].text
+}
+
+//if aitext is not null, that means the previous check was fine
+if (aiText)
+{
+try
+{
+const parsed = JSON.parse(aiText)
+result.name = parsed.name || result.name
+result.calories = parsed.calories || result.calories
+result.protein = parsed.protein || result.protein
+result.carbs = parsed.carbs || result.carbs
+result.fat = parsed.fat || result.fat
+result.ingredients = parsed.ingredients || result.ingredients
+}
+catch (e)
+{
+console.error("json parse error", e)
+}
+}
+}
+catch (err)
+{
+console.error("ai error", err)
+}
+//stuff above is just broad error catching
 if (!result || !result.name)
 {
 return res.status(500).json({ error: "ai failed to analyze image" })
@@ -192,7 +250,7 @@ calories: result.calories || 0,
 protein: result.protein || 0,
 carbs: result.carbs || 0,
 fat: result.fat || 0,
-ingredients: result.ingredients || []
+ingredients: Array.isArray(result.ingredients) ? result.ingredients : []
 }
 }
 
@@ -226,8 +284,9 @@ calories: food.calories
 }
 })
 }
-catch
+catch (e)
 {
+console.error("db error", e)
 return null
 }
 
