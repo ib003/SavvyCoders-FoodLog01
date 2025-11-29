@@ -5,6 +5,8 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
+const OpenAI = require("openai");
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const app = express();
 app.use(cors());
