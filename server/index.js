@@ -168,7 +168,7 @@ if (!dataUrl.startsWith("data:"))
 dataUrl = "data:image/jpeg;base64," + dataUrl
 }
 
-//TODO: send image to chatgpt api and receive analysis result
+//this object will hold the final ai estimate for the food in the picture
 let result =
 {
 name: "unknown food",
@@ -236,21 +236,65 @@ if (!result || !result.name)
 return res.status(500).json({ error: "ai failed to analyze image" })
 }
 
-//TODO: write a function to decipher the AI output and make sure we can pass it to food
+//this function normalizes what the ai gave us to usable food object
 function normalizeFood(result)
 {
-if (!result)
+  if (!result)
+  {
+  return null
+  }
+  
+  if (typeof result !== "object")
+  {
+  return null
+  }
+
+let calories = Number(result.calories)
+//all of these if statements below just make sure the avlues they get are positive, usable numbers
+if (isNaN(calories) || calories < 0)
 {
-return null
+calories = 0
 }
 
+let protein = Number(result.protein)
+if (isNaN(protein) || protein < 0)
+{
+protein = 0
+}
+
+let carbs = Number(result.carbs)
+if (isNaN(carbs) || carbs < 0)
+{
+carbs = 0
+}
+
+let fat = Number(result.fat)
+if (isNaN(fat) || fat < 0)
+{
+fat = 0
+}
+
+let ingredients = []
+if (Array.isArray(result.ingredients))
+{
+ingredients = result.ingredients.map((item) =>
+{
+if (typeof item === "string")
+{
+return item
+}
+return String(item)
+})
+}
+
+//we aren't using result.value for these values anymore because they all got tested and if need be, cleaned in the if statements above
 return {
 name: result.name || "unknown",
-calories: result.calories || 0,
-protein: result.protein || 0,
-carbs: result.carbs || 0,
-fat: result.fat || 0,
-ingredients: Array.isArray(result.ingredients) ? result.ingredients : []
+calories: calories,
+protein: protein,
+carbs: carbs,
+fat: fat,
+ingredients: ingredients
 }
 }
 
