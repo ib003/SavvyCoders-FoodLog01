@@ -245,9 +245,9 @@ function normalizeFood(result)
   }
   
   if (typeof result !== "object")
-  {
-  return null
-  }
+{
+return null
+}
 
 let calories = Number(result.calories)
 //all of these if statements below just make sure the avlues they get are positive, usable numbers
@@ -298,11 +298,10 @@ ingredients: ingredients
 }
 }
 
-//TODO: write a function save food data to database
-//this function still is a placeholder and does nothing, even when i remove "food"
+//this function saves the normalized food to the database so we can reuse it later
 async function saveFood(food)
 {
-if (!food)
+if (!food || !food.name)
 {
 return null
 }
@@ -328,7 +327,14 @@ return null
 return saved
 }
 
+//in case normalizeFood returns NULL, we return an error message
 const clean = normalizeFood(result)
+
+if (!clean)
+{
+return res.status(500).json({ error: "ai result invalid" })
+}
+
 const saved = await saveFood(clean)
 
 res.json(saved || clean)
