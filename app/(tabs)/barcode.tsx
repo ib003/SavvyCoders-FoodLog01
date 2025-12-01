@@ -5,7 +5,6 @@ import AllergenWarning from "@/components/AllergenWarning";
 import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -44,7 +43,6 @@ export default function AddBarcode() {
   const [quantityModalVisible, setQuantityModalVisible] = useState(false);
   const [allergenAnalysis, setAllergenAnalysis] = useState<any>(null);
   const [isSafe, setIsSafe] = useState<boolean | null>(null);
-  // no camera ref — we use CameraView for live scanning and ImagePicker for photo fallback
 
   useEffect(() => {
     if (!permission) {
@@ -54,8 +52,7 @@ export default function AddBarcode() {
 
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     if (scanned || scanning) return;
-    // If we were in manual-scan mode, disable it once a barcode is detected
-    if (manualScan) setManualScan(false);
+    
     setScanning(true);
     setScanned(true);
     setLoading(true);
@@ -69,7 +66,6 @@ export default function AddBarcode() {
       if (response.status === 404) {
         setError("Barcode not found in database");
         setScanning(false);
-        Alert.alert("Not Found", "Barcode not found in our database.");
         return;
       }
 
@@ -96,111 +92,12 @@ export default function AddBarcode() {
     } catch (err: any) {
       console.error("Barcode scan error:", err);
       setError(err.message || "Failed to process barcode. Please try again.");
-      Alert.alert("Scan Error", err.message || "Failed to process barcode. Please try again.");
     } finally {
       setLoading(false);
       setScanning(false);
     }
   };
 
-  // Trigger a one-shot capture/scan window. Enables manualScan for a short
-  // period so the `onBarcodeScanned` handler can fire once a barcode is
-  // detected. This provides an explicit "Capture" button behavior.
-  const triggerOneShotScan = () => {
-    if (scanning || scanned) return;
-    setError(null);
-    setFood(null);
-    setIsSafe(null);
-    setManualScan(true);
-
-    // Disable manual mode after a timeout to avoid leaving it on forever.
-    setTimeout(() => {
-      // If still not scanned, notify the user and turn off manual mode.
-      if (!scanned) {
-        setManualScan(false);
-        setError("No barcode detected");
-        Alert.alert(
-          "No barcode detected",
-          "We couldn't find a barcode. Try moving the camera closer or use the Photo option.",
-        );
-      } else {
-        setManualScan(false);
-      }
-    }, 8000);
-  };
-
-  // Take a photo using the system camera UI and POST it to the server decode endpoint.
-  const takePictureAndDecode = async () => {
-    if (scanning || scanned) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (permissionResult.status !== "granted") {
-        Alert.alert("Permission required", "Camera permission is required to take a photo.");
-        setLoading(false);
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({ quality: 0.8, base64: false });
-      if ((result as any).cancelled || (result as any).canceled) {
-        setLoading(false);
-        return;
-      }
-
-      const uri = (result as any).uri || (result as any).assets?.[0]?.uri;
-      if (!uri) {
-        setError("No photo taken");
-        Alert.alert("No photo", "No photo was taken.");
-        setLoading(false);
-        return;
-      }
-
-      const form = new FormData();
-      form.append("image", {
-        uri,
-        name: "photo.jpg",
-        type: "image/jpeg",
-      } as any);
-
-      const resp = await fetch(`${API_BASE}/barcode/decode`, {
-        method: "POST",
-        body: form,
-        headers: { Accept: "application/json" },
-      });
-
-      if (resp.status === 404) {
-        setError("Barcode not found in image");
-        Alert.alert("Not Found", "No barcode was detected in the photo.");
-        return;
-      }
-
-      if (!resp.ok) throw new Error("Failed to decode barcode from image");
-
-      const json = await resp.json();
-      if (json.code) {
-        await handleBarCodeScanned({ data: json.code });
-      } else if (json.id || json.name) {
-        const foodData = json as Food;
-        setFood(foodData);
-        const foodTags = [foodData.name.toLowerCase()];
-        if (foodData.brand) foodTags.push(foodData.brand.toLowerCase());
-        const analysis = await analyzeFood(foodTags);
-        setAllergenAnalysis(analysis);
-        setIsSafe(!analysis.hasAllergenWarning && !analysis.hasDietaryConflict);
-        setQuantityModalVisible(true);
-      } else {
-        setError("No barcode found in the photo");
-        Alert.alert("No barcode detected", "We couldn't find a barcode in the photo. Try retaking the picture or use the live scanner.");
-      }
-    } catch (err: any) {
-      console.error("Photo decode error:", err);
-      setError(err.message || "Failed to decode image");
-      Alert.alert("Decode Error", err.message || "Failed to decode the image. Try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
   const handleReset = () => {
     setScanned(false);
     setFood(null);
@@ -292,6 +189,27 @@ export default function AddBarcode() {
     );
   }
 
+  // One-shot manual capture: enable manualScan for a short window so the
+  // camera will invoke `handleBarCodeScanned` once a barcode is detected.
+  const triggerOneShotScan = () => {
+    if (scanning || scanned) return;
+    setManualScan(true);
+    setError(null);
+    // disable after 8s and notify if nothing found
+    setTimeout(() => {
+      if (!scanned) {
+        setManualScan(false);
+        setError("No barcode detected");
+        Alert.alert(
+          "No barcode detected",
+          "We couldn't find a barcode. Try moving the camera closer and try again."
+        );
+      } else {
+        setManualScan(false);
+      }
+    }, 8000);
+  };
+
   return (
     <View style={styles.container}>
       {/* Camera View */}
@@ -348,29 +266,13 @@ export default function AddBarcode() {
                 <Text style={styles.scanAgainText}>Scan Again</Text>
               </TouchableOpacity>
             )}
-            {/* Manual capture button: enables one-shot scanning when pressed */}
             {!loading && !error && !scanned && (
               <TouchableOpacity
-                style={[
-                  styles.captureButton,
-                  manualScan ? styles.captureButtonActive : {},
-                ]}
+                style={[styles.captureButton, manualScan ? styles.captureButtonActive : {}]}
                 onPress={triggerOneShotScan}
               >
                 <FontAwesome name="camera" size={18} color="#FFFFFF" />
-                <Text style={styles.captureButtonText}>
-                  {manualScan ? "Scanning..." : "Capture"}
-                </Text>
-              </TouchableOpacity>
-            )}
-            {/* Photo-capture fallback: take picture and send to server for decode */}
-            {!loading && !error && !scanned && (
-              <TouchableOpacity
-                style={styles.photoButton}
-                onPress={takePictureAndDecode}
-              >
-                <FontAwesome name="image" size={16} color="#FFFFFF" />
-                <Text style={styles.photoButtonText}>Photo</Text>
+                <Text style={styles.captureButtonText}>{manualScan ? "Scanning..." : "Capture"}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -792,22 +694,6 @@ const styles = StyleSheet.create({
   captureButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "700",
-    marginLeft: 8,
-  },
-  photoButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.primary.green,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginTop: 12,
-  },
-  photoButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
     fontWeight: "700",
     marginLeft: 8,
   },
