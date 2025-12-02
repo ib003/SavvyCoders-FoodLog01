@@ -1,6 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_BASE } from "@/app/constants/api";
-import { auth } from "./auth";
 
 const SYMPTOMS_KEY = "user_symptoms";
 

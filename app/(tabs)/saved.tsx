@@ -1,5 +1,5 @@
-import { API_BASE } from "@/app/constants/api";
-import { auth } from "@/app/lib/auth";
+import { API_BASE } from "@/src/constants/api";
+import { auth } from "@/src/lib/auth";
 import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";

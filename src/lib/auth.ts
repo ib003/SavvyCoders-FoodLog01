@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_BASE } from "@/app/constants/api";
+
+const BASE_URL = "http://192.168.4.35:3000";
 
 // Add this helper function at the top of the file
 const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 3000): Promise<Response> => {
@@ -27,7 +28,7 @@ export const auth = {
     try {
       // Quick 2-second check using Promise.race
       const response = await Promise.race([
-        fetch(`${API_BASE}/foods?q=test`, { method: "GET" }),
+        fetch(`${BASE_URL}/foods?q=test`, { method: "GET" }),
         new Promise<Response>((_, reject) =>
           setTimeout(() => reject(new Error("Timeout")), 2000)
         ),
@@ -42,7 +43,7 @@ export const auth = {
   // Login with email and password
   async login(email: string, password: string): Promise<LoginResponse> {
     try {
-      console.log("Attempting login to:", `${API_BASE}/auth/login`);
+      console.log("Attempting login to:", `${BASE_URL}/auth/login`);
       
       // Quick server check before attempting login
       const serverAvailable = await this.checkServerConnection();
@@ -51,7 +52,7 @@ export const auth = {
       }
       
       const response = await fetchWithTimeout(
-        `${API_BASE}/auth/login`,
+        `${BASE_URL}/auth/login`,
         {
           method: "POST",
           headers: { 
@@ -87,10 +88,13 @@ export const auth = {
         throw new Error("No token received from server");
       }
 
+      // Handle both old format { token, email } and new format { token, user: { id, email } }
+      const userEmail = data.user?.email || data.email || email.trim();
+
       await this.saveToken(data.token);
-      await AsyncStorage.setItem(USER_EMAIL_KEY, email.trim());
+      await AsyncStorage.setItem(USER_EMAIL_KEY, userEmail);
       console.log("Login successful, token saved");
-      return { token: data.token, email: email.trim() };
+      return { token: data.token, email: userEmail };
     } catch (error: any) {
       console.error("Login error:", error);
       
@@ -112,7 +116,7 @@ export const auth = {
   // Register new user with email and password
   async register(email: string, password: string): Promise<LoginResponse> {
     try {
-      console.log("Attempting registration to:", `${API_BASE}/auth/register`);
+      console.log("Attempting registration to:", `${BASE_URL}/auth/register`);
       
       // Quick server check before attempting registration
       const serverAvailable = await this.checkServerConnection();
@@ -121,7 +125,7 @@ export const auth = {
       }
       
       const response = await fetchWithTimeout(
-        `${API_BASE}/auth/register`,
+        `${BASE_URL}/auth/register`,
         {
           method: "POST",
           headers: { 
@@ -156,15 +160,26 @@ export const auth = {
       }
 
       const data = await response.json();
+      console.log("Registration response data:", JSON.stringify(data, null, 2));
       
       if (!data.token) {
+        console.error("No token in registration response:", data);
         throw new Error("No token received from server");
       }
 
+      // Handle both old format { token, email } and new format { token, user: { id, email } }
+      const userEmail = data.user?.email || data.email || email.trim();
+      console.log("Saving token and email:", { hasToken: !!data.token, userEmail });
+
       await this.saveToken(data.token);
-      await AsyncStorage.setItem(USER_EMAIL_KEY, email.trim());
+      await AsyncStorage.setItem(USER_EMAIL_KEY, userEmail);
+      
+      // Verify token was saved
+      const savedToken = await this.getToken();
+      console.log("Token saved successfully:", savedToken ? "Yes" : "No");
+      
       console.log("Registration successful, token saved");
-      return { token: data.token, email: email.trim() };
+      return { token: data.token, email: userEmail };
     } catch (error: any) {
       console.error("Registration error:", error);
       
@@ -238,8 +253,14 @@ export const auth = {
   async clear() {
     try {
       await AsyncStorage.multiRemove([TOKEN_KEY, USER_EMAIL_KEY]);
+      console.log("Auth data cleared successfully");
     } catch (e) {
       console.error("Failed to clear auth data:", e);
     }
+  },
+
+  // Clear token helper for testing/debugging
+  async clearToken() {
+    return this.clear();
   },
 };
