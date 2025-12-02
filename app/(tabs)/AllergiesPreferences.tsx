@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIn
 import { useRouter } from "expo-router";
 import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
-import { preferences, COMMON_ALLERGENS, COMMON_DIETARY_PREFERENCES, UserPreferences } from "@/app/lib/preferences";
+import { preferences, COMMON_ALLERGENS, COMMON_DIETARY_PREFERENCES, UserPreferences } from "@/src/lib/preferences";
 
 export default function AllergiesPreferences() {
   const router = useRouter();

@@ -1,5 +1,5 @@
+import { API_BASE } from "@/src/constants/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_BASE } from "@/app/constants/api";
 import { auth } from "./auth";
 
 const PREFERENCES_KEY = "user_preferences";

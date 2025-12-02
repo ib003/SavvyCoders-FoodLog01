@@ -1,20 +1,22 @@
-import { API_BASE } from "@/app/constants/api";
-import { analyzeFood } from "@/app/lib/allergenChecker";
-import { auth } from "@/app/lib/auth";
-import { preferences } from "@/app/lib/preferences";
 import AllergenWarning from "@/components/AllergenWarning";
-import { Colors } from "@/constants/Colors";
+import { Card } from "@/components/ui/Card";
+import { Theme } from "@/constants/Theme";
+import { API_BASE } from "@/src/constants/api";
+import { analyzeFood } from "@/src/lib/allergenChecker";
+import { auth } from "@/src/lib/auth";
+import { preferences } from "@/src/lib/preferences";
 import { FontAwesome } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 interface Meal {
@@ -63,14 +65,12 @@ export default function AllergenWarningScreen() {
         return;
       }
 
-      // Get meals from the last 7 days
       const today = new Date();
       const sevenDaysAgo = new Date(today);
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
       const alerts: AlertItem[] = [];
 
-      // Fetch meals for the last 7 days
       for (let i = 0; i < 7; i++) {
         const date = new Date(sevenDaysAgo);
         date.setDate(date.getDate() + i);
@@ -84,11 +84,11 @@ export default function AllergenWarningScreen() {
           });
 
           if (response.ok) {
-            const meals: Meal[] = await response.json();
+            const meals = await response.json();
             const userPrefs = await preferences.fetch();
 
             for (const meal of meals) {
-              const foodNames = meal.items.map((item) => item.food.name);
+              const foodNames = meal.items.map((item: any) => item.food.name);
               const analysis = await analyzeFood(foodNames, userPrefs);
 
               if (analysis.hasAllergenWarning || analysis.hasDietaryConflict) {
@@ -104,7 +104,6 @@ export default function AllergenWarningScreen() {
         }
       }
 
-      // Sort by date (most recent first)
       alerts.sort((a, b) => {
         return new Date(b.meal.occurredAt).getTime() - new Date(a.meal.occurredAt).getTime();
       });
@@ -162,7 +161,7 @@ export default function AllergenWarningScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary.green} />
+        <ActivityIndicator size="large" color={Theme.colors.primary.main} />
         <Text style={styles.loadingText}>Loading allergen warnings...</Text>
       </View>
     );
@@ -170,33 +169,46 @@ export default function AllergenWarningScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-          activeOpacity={0.7}
-        >
-          <FontAwesome name="arrow-left" size={20} color={Colors.neutral.textDark} />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Allergen Warnings</Text>
-          <Text style={styles.headerSubtitle}>
-            {allAlerts.length} {allAlerts.length === 1 ? "alert" : "alerts"} in the last 7 days
-          </Text>
+      {/* Header with Gradient */}
+      <LinearGradient
+        colors={[Theme.colors.background.gradient[0], Theme.colors.background.gradient[1]]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.headerGradient}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <FontAwesome name="arrow-left" size={20} color={Theme.colors.text.primary} />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>Allergen Warnings</Text>
+            <Text style={styles.headerSubtitle}>
+              {allAlerts.length} {allAlerts.length === 1 ? "alert" : "alerts"} in the last 7 days
+            </Text>
+          </View>
         </View>
-      </View>
+      </LinearGradient>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor={Theme.colors.primary.main}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         {allAlerts.length === 0 ? (
-          <View style={styles.emptyContainer}>
+          <Card style={styles.emptyContainer} padding="2xl" variant="outlined">
             <View style={styles.emptyIconContainer}>
-              <FontAwesome name="check-circle" size={64} color={Colors.primary.green} />
+              <FontAwesome name="check-circle" size={64} color={Theme.colors.primary.main} />
             </View>
             <Text style={styles.emptyTitle}>No Warnings! 🎉</Text>
             <Text style={styles.emptyText}>
@@ -205,11 +217,11 @@ export default function AllergenWarningScreen() {
             <Text style={styles.emptySubtext}>
               Keep up the great work staying safe!
             </Text>
-          </View>
+          </Card>
         ) : (
           <>
             {/* Summary Card */}
-            <View style={styles.summaryCard}>
+            <Card style={styles.summaryCard} padding="lg" variant="elevated">
               <View style={styles.summaryRow}>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryValue}>
@@ -225,17 +237,17 @@ export default function AllergenWarningScreen() {
                   <Text style={styles.summaryLabel}>Dietary Conflicts</Text>
                 </View>
               </View>
-            </View>
+            </Card>
 
             {/* Alerts List */}
             {allAlerts.map((alert, index) => (
-              <View key={alert.meal.id || index} style={styles.alertCard}>
+              <Card key={alert.meal.id || index} style={styles.alertCard} padding="lg" variant="elevated">
                 <View style={styles.alertHeader}>
                   <View style={styles.alertDateContainer}>
                     <FontAwesome
                       name={getMealTypeIcon(alert.meal.mealType) as any}
                       size={16}
-                      color={Colors.primary.orange}
+                      color={Theme.colors.accent.orange}
                     />
                     <Text style={styles.alertDate}>
                       {formatDate(alert.meal.occurredAt)} • {formatTime(alert.meal.occurredAt)}
@@ -254,7 +266,7 @@ export default function AllergenWarningScreen() {
                 </View>
 
                 <AllergenWarning analysis={alert.analysis} variant="full" />
-              </View>
+              </Card>
             ))}
           </>
         )}
@@ -266,28 +278,27 @@ export default function AllergenWarningScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.neutral.backgroundLight,
+    backgroundColor: Theme.colors.background.secondary,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: Colors.neutral.backgroundLight,
+    backgroundColor: Theme.colors.background.secondary,
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: Colors.neutral.mutedGray,
+    ...Theme.typography.body,
+    color: Theme.colors.text.secondary,
+    marginTop: Theme.spacing.lg,
+  },
+  headerGradient: {
+    paddingTop: Theme.spacing['5xl'],
+    paddingBottom: Theme.spacing['2xl'],
+    paddingHorizontal: Theme.spacing.lg,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-    backgroundColor: Colors.neutral.cardSurface,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
   },
   backButton: {
     width: 40,
@@ -295,68 +306,57 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: Theme.spacing.md,
+    backgroundColor: Theme.colors.background.primary,
+    ...Theme.shadows.card,
   },
   headerContent: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: Colors.neutral.textDark,
-    marginBottom: 4,
+    ...Theme.typography.title,
+    fontSize: 28,
+    color: Theme.colors.text.primary,
+    marginBottom: Theme.spacing.xs,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
-    fontWeight: "500",
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.text.secondary,
+    fontWeight: '500',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
+    padding: Theme.spacing.lg,
+    paddingBottom: Theme.spacing['3xl'],
   },
   emptyContainer: {
-    flex: 1,
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
+    marginTop: Theme.spacing['3xl'],
   },
   emptyIconContainer: {
-    marginBottom: 24,
+    marginBottom: Theme.spacing['2xl'],
   },
   emptyTitle: {
+    ...Theme.typography.title,
     fontSize: 24,
-    fontWeight: "800",
-    color: Colors.neutral.textDark,
-    marginBottom: 12,
+    color: Theme.colors.text.primary,
+    marginBottom: Theme.spacing.md,
   },
   emptyText: {
-    fontSize: 16,
-    color: Colors.neutral.textDark,
+    ...Theme.typography.body,
+    color: Theme.colors.text.primary,
     textAlign: "center",
-    lineHeight: 24,
-    marginBottom: 8,
-    paddingHorizontal: 32,
+    marginBottom: Theme.spacing.sm,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.text.secondary,
     textAlign: "center",
-    paddingHorizontal: 32,
   },
   summaryCard: {
-    backgroundColor: Colors.neutral.cardSurface,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    marginBottom: Theme.spacing.lg,
   },
   summaryRow: {
     flexDirection: "row",
@@ -370,67 +370,60 @@ const styles = StyleSheet.create({
   summaryDivider: {
     width: 1,
     height: 40,
-    backgroundColor: "#E0E0E0",
+    backgroundColor: Theme.colors.border.light,
   },
   summaryValue: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: Colors.primary.orange,
-    marginBottom: 4,
+    ...Theme.typography.title,
+    fontSize: 36,
+    color: Theme.colors.accent.orange,
+    marginBottom: Theme.spacing.xs,
   },
   summaryLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.neutral.mutedGray,
+    ...Theme.typography.caption,
+    fontWeight: '600',
+    color: Theme.colors.text.secondary,
     textAlign: "center",
   },
   alertCard: {
-    backgroundColor: Colors.neutral.cardSurface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    marginBottom: Theme.spacing.md,
   },
   alertHeader: {
-    marginBottom: 12,
+    marginBottom: Theme.spacing.md,
   },
   alertDateContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: Theme.spacing.sm,
   },
   alertDate: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.neutral.mutedGray,
-    marginLeft: 8,
+    ...Theme.typography.caption,
+    fontWeight: '600',
+    color: Theme.colors.text.secondary,
+    marginLeft: Theme.spacing.sm,
   },
   alertMealType: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
+    ...Theme.typography.body,
+    fontWeight: '700',
+    color: Theme.colors.text.primary,
   },
   alertFoods: {
-    marginBottom: 12,
-    paddingBottom: 12,
+    marginBottom: Theme.spacing.md,
+    paddingBottom: Theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
+    borderBottomColor: Theme.colors.border.light,
   },
   alertFoodsLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Colors.neutral.mutedGray,
-    marginBottom: 4,
+    ...Theme.typography.captionSmall,
+    fontWeight: '600',
+    color: Theme.colors.text.secondary,
+    marginBottom: Theme.spacing.xs,
     textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   alertFoodsText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: Colors.neutral.textDark,
+    ...Theme.typography.bodySmall,
+    fontWeight: '500',
+    color: Theme.colors.text.primary,
     lineHeight: 20,
   },
 });
