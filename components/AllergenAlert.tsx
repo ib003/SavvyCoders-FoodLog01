@@ -1,4 +1,4 @@
-import { analyzeFood } from "@/app/lib/allergenChecker";
+import { analyzeFood } from "@/src/lib/allergenChecker";
 import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";

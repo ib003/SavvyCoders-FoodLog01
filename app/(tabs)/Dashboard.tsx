@@ -1,15 +1,18 @@
-import { API_BASE } from "@/app/constants/api";
-import { analyzeFood } from "@/app/lib/allergenChecker";
-import { auth } from "@/app/lib/auth";
-import { preferences } from "@/app/lib/preferences";
-import { Symptom, symptoms } from "@/app/lib/symptoms";
 import AllergenWarning from "@/components/AllergenWarning";
 import NutritionInsights from "@/components/NutritionInsights";
-import { Colors } from "@/constants/Colors";
+import { Card } from "@/components/ui/Card";
+import { Theme } from "@/constants/Theme";
+import { API_BASE } from "@/src/constants/api";
+import { analyzeFood } from "@/src/lib/allergenChecker";
+import { auth } from "@/src/lib/auth";
+import { preferences } from "@/src/lib/preferences";
+import { Symptom, symptoms } from "@/src/lib/symptoms";
+import { useFadeIn, useStagger } from "@/src/ui/animations";
 import { FontAwesome } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface Meal {
   id: string;
@@ -46,11 +49,18 @@ export default function DashboardScreen() {
   const [todaySymptoms, setTodaySymptoms] = useState<Symptom[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
 
-  //check authentication on mount
+  // Animations - use max count to avoid re-renders
+  const emptyStateOpacity = useFadeIn(400, 200);
+  const maxMeals = 10; // Max expected meals for animation
+  const maxAlerts = 10; // Max expected alerts for animation
+  const mealAnimations = useStagger(maxMeals, 300, 80);
+  const alertAnimations = useStagger(maxAlerts, 300, 80);
+
   useEffect(() => {
     const checkAuthAndLoad = async () => {
-      const isAuth = await auth.isAuthenticated();
-      if (!isAuth) {
+      const token = await auth.getToken();
+      if (!token || typeof token !== 'string' || token.length < 20) {
+        console.log("[Dashboard] No valid token, redirecting to login");
         router.replace("/");
         return;
       }
@@ -59,7 +69,6 @@ export default function DashboardScreen() {
     checkAuthAndLoad();
   }, []);
 
-  //refresh symptoms when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       loadTodaySymptoms();
@@ -105,9 +114,7 @@ export default function DashboardScreen() {
     const alertsList: AlertItem[] = [];
 
     for (const meal of meals) {
-      //collect all food tags/names for this meal
       const foodNames = meal.items.map(item => item.food.name);
-      //for now we use food names as tags - in production you would have actual allergen tags
       const analysis = await analyzeFood(foodNames, userPrefs);
       
       if (analysis.hasAllergenWarning || analysis.hasDietaryConflict) {
@@ -170,7 +177,7 @@ export default function DashboardScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary.green} />
+        <ActivityIndicator size="large" color={Theme.colors.primary.main} />
         <Text style={styles.loadingText}>Loading dashboard...</Text>
       </View>
     );
@@ -178,24 +185,41 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Good {new Date().getHours() < 12 ? "Morning" : new Date().getHours() < 18 ? "Afternoon" : "Evening"}!</Text>
-          <Text style={styles.date}>{getTodayDate()}</Text>
+      {/* Header with Gradient */}
+      <LinearGradient
+        colors={[Theme.colors.background.gradient[0], Theme.colors.background.gradient[1]]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.headerGradient}
+      >
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>
+              Good {new Date().getHours() < 12 ? "Morning" : new Date().getHours() < 18 ? "Afternoon" : "Evening"}!
+            </Text>
+            <Text style={styles.date}>{getTodayDate()}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => router.push("/(tabs)/Profile")}
+          >
+            <View style={styles.profileIconContainer}>
+              <FontAwesome name="user-circle" size={28} color={Theme.colors.primary.main} />
+            </View>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.profileButton}
-          onPress={() => router.push("/(tabs)/Profile")}
-        >
-          <FontAwesome name="user-circle" size={28} color={Colors.primary.green} />
-        </TouchableOpacity>
-      </View>
+      </LinearGradient>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary.green} />}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            tintColor={Theme.colors.primary.main} 
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         {/* Quick Actions */}
@@ -203,23 +227,28 @@ export default function DashboardScreen() {
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.actionsRow}>
             <TouchableOpacity
-              style={[styles.actionButton, { marginRight: 6 }]}
+              style={styles.actionButton}
               onPress={() => router.push("/(tabs)/AddMeal")}
               activeOpacity={0.8}
             >
-              <View style={[styles.actionIconContainer, { backgroundColor: `${Colors.primary.green}15` }]}>
-                <FontAwesome name="plus-circle" size={24} color={Colors.primary.green} />
-              </View>
+              <LinearGradient
+                colors={[Theme.colors.primary.gradient[0], Theme.colors.primary.gradient[1]]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.actionIconContainer}
+              >
+                <FontAwesome name="plus-circle" size={24} color="#FFFFFF" />
+              </LinearGradient>
               <Text style={styles.actionButtonText}>Add Meal</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.actionButton, { marginLeft: 6 }]}
+              style={styles.actionButton}
               onPress={() => router.push("/(tabs)/AllergiesPreferences")}
               activeOpacity={0.8}
             >
-              <View style={[styles.actionIconContainer, { backgroundColor: `${Colors.primary.orange}15` }]}>
-                <FontAwesome name="exclamation-triangle" size={24} color={Colors.primary.orange} />
+              <View style={[styles.actionIconContainer, { backgroundColor: `${Theme.colors.accent.orange}20` }]}>
+                <FontAwesome name="exclamation-triangle" size={24} color={Theme.colors.accent.orange} />
               </View>
               <Text style={styles.actionButtonText}>Allergies</Text>
             </TouchableOpacity>
@@ -235,61 +264,85 @@ export default function DashboardScreen() {
                 <Text style={styles.alertCountText}>{alerts.length}</Text>
               </View>
             </View>
-            {alerts.map((alert, index) => (
-              <View key={index} style={styles.alertWrapper}>
-                <View style={styles.alertMealInfo}>
-                  <View style={styles.alertMealHeader}>
-                    <FontAwesome 
-                      name={getMealTypeIcon(alert.meal.mealType) as any} 
-                      size={16} 
-                      color={Colors.primary.orange} 
-                    />
-                    <Text style={styles.alertMealType}>
-                      {getMealTypeLabel(alert.meal.mealType)} • {formatTime(alert.meal.occurredAt)}
-                    </Text>
-                  </View>
-                  <Text style={styles.alertMealItems} numberOfLines={2}>
-                    {alert.meal.items.map(item => item.food.name).join(", ")}
+            {alerts.map((alert, index) => {
+              const anim = alertAnimations[Math.min(index, alertAnimations.length - 1)];
+              return (
+                <Animated.View
+                  key={index}
+                  style={{
+                    opacity: anim.opacity,
+                    transform: [{ translateY: anim.translateY }],
+                  }}
+                >
+                  <Card style={styles.alertCard} padding="lg" variant="elevated">
+                <View style={styles.alertMealHeader}>
+                  <FontAwesome 
+                    name={getMealTypeIcon(alert.meal.mealType) as any} 
+                    size={16} 
+                    color={Theme.colors.accent.orange} 
+                  />
+                  <Text style={styles.alertMealType}>
+                    {getMealTypeLabel(alert.meal.mealType)} • {formatTime(alert.meal.occurredAt)}
                   </Text>
                 </View>
-                <AllergenWarning 
-                  analysis={alert.analysis} 
-                  variant="banner"
-                />
-              </View>
-            ))}
+                <Text style={styles.alertMealItems} numberOfLines={2}>
+                  {alert.meal.items.map(item => item.food.name).join(", ")}
+                </Text>
+                <View style={styles.alertWarningContainer}>
+                  <AllergenWarning 
+                    analysis={alert.analysis} 
+                    variant="banner"
+                  />
+                </View>
+                  </Card>
+                </Animated.View>
+              );
+            })}
           </View>
         )}
 
         {/* Today's Meals */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FontAwesome name="cutlery" size={20} color={Colors.primary.green} style={{ marginRight: 8 }} />
+            <FontAwesome name="cutlery" size={20} color={Theme.colors.primary.main} style={styles.sectionIcon} />
             <Text style={styles.sectionTitle}>Today's Meals</Text>
-            <Text style={styles.mealCount}>{todayMeals.length}</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{todayMeals.length}</Text>
+            </View>
           </View>
 
           {todayMeals.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <FontAwesome name="cutlery" size={32} color={Colors.neutral.mutedGray} />
-              <Text style={styles.emptyText}>No meals logged today</Text>
-              <TouchableOpacity
-                style={styles.emptyButton}
-                onPress={() => router.push("/(tabs)/AddMeal")}
-              >
-                <Text style={styles.emptyButtonText}>Add Your First Meal</Text>
-              </TouchableOpacity>
-            </View>
+            <Animated.View style={{ opacity: emptyStateOpacity }}>
+              <Card style={styles.emptyCard} padding="2xl" variant="outlined">
+                <FontAwesome name="cutlery" size={48} color={Theme.colors.text.tertiary} />
+                <Text style={styles.emptyText}>No meals logged today</Text>
+                <TouchableOpacity
+                  style={styles.emptyButton}
+                  onPress={() => router.push("/(tabs)/AddMeal")}
+                >
+                  <Text style={styles.emptyButtonText}>Add Your First Meal</Text>
+                </TouchableOpacity>
+              </Card>
+            </Animated.View>
           ) : (
-            todayMeals.map((meal) => (
-              <View key={meal.id} style={styles.mealCard}>
+            todayMeals.map((meal, index) => {
+              const anim = mealAnimations[Math.min(index, mealAnimations.length - 1)];
+              return (
+                <Animated.View
+                  key={meal.id}
+                  style={{
+                    opacity: anim.opacity,
+                    transform: [{ translateY: anim.translateY }],
+                  }}
+                >
+                  <Card style={styles.mealCard} padding="lg" variant="elevated">
                 <View style={styles.mealHeader}>
                   <View style={styles.mealTypeContainer}>
                     <FontAwesome
                       name={getMealTypeIcon(meal.mealType)}
                       size={18}
-                      color={Colors.primary.green}
-                      style={{ marginRight: 8 }}
+                      color={Theme.colors.primary.main}
+                      style={styles.mealIcon}
                     />
                     <Text style={styles.mealType}>{getMealTypeLabel(meal.mealType)}</Text>
                   </View>
@@ -298,7 +351,13 @@ export default function DashboardScreen() {
 
                 <View style={styles.mealItems}>
                   {meal.items.map((item, index) => (
-                    <View key={item.food.id} style={styles.mealItem}>
+                    <View 
+                      key={item.food.id} 
+                      style={[
+                        styles.mealItem,
+                        index < meal.items.length - 1 && styles.mealItemBorder
+                      ]}
+                    >
                       <Text style={styles.mealItemName}>{item.food.name}</Text>
                       {item.food.kcal && (
                         <Text style={styles.mealItemKcal}>{item.food.kcal} kcal</Text>
@@ -306,29 +365,33 @@ export default function DashboardScreen() {
                     </View>
                   ))}
                 </View>
-              </View>
-            ))
+                  </Card>
+                </Animated.View>
+              );
+            })
           )}
         </View>
 
         {/* Symptoms Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FontAwesome name="heartbeat" size={20} color={Colors.primary.orange} style={{ marginRight: 8 }} />
+            <FontAwesome name="heartbeat" size={20} color={Theme.colors.accent.orange} style={styles.sectionIcon} />
             <Text style={styles.sectionTitle}>Today's Symptoms</Text>
-            <Text style={styles.mealCount}>{todaySymptoms.length}</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{todaySymptoms.length}</Text>
+            </View>
           </View>
 
           {todaySymptoms.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <FontAwesome name="smile-o" size={32} color={Colors.neutral.mutedGray} />
+            <Card style={styles.emptyCard} padding="2xl" variant="outlined">
+              <FontAwesome name="smile-o" size={48} color={Theme.colors.text.tertiary} />
               <Text style={styles.emptyText}>No symptoms logged</Text>
               <Text style={styles.emptySubtext}>Tap to add symptoms</Text>
-            </View>
+            </Card>
           ) : (
             <View style={styles.symptomsContainer}>
               {todaySymptoms.map((symptom) => (
-                <View key={symptom.id} style={[styles.symptomChip, { marginRight: 8, marginBottom: 8 }]}>
+                <View key={symptom.id} style={styles.symptomChip}>
                   <Text style={styles.symptomName}>{symptom.name}</Text>
                   <View
                     style={[
@@ -345,7 +408,7 @@ export default function DashboardScreen() {
                     style={styles.removeSymptomButton}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <FontAwesome name="times" size={12} color={Colors.neutral.mutedGray} />
+                    <FontAwesome name="times" size={12} color={Theme.colors.text.tertiary} />
                   </TouchableOpacity>
                 </View>
               ))}
@@ -357,7 +420,7 @@ export default function DashboardScreen() {
             onPress={() => router.push("/symptom")}
             activeOpacity={0.8}
           >
-            <FontAwesome name="plus" size={16} color={Colors.primary.green} style={{ marginRight: 8 }} />
+            <FontAwesome name="plus" size={16} color={Theme.colors.primary.main} style={styles.addIcon} />
             <Text style={styles.addSymptomText}>Add Symptom</Text>
           </TouchableOpacity>
         </View>
@@ -367,18 +430,18 @@ export default function DashboardScreen() {
 
         {/* Summary Stats */}
         <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
+          <Card style={styles.statCard} padding="lg" variant="elevated">
             <Text style={styles.statValue}>{todayMeals.length}</Text>
             <Text style={styles.statLabel}>Meals</Text>
-          </View>
-          <View style={styles.statCard}>
+          </Card>
+          <Card style={styles.statCard} padding="lg" variant="elevated">
             <Text style={styles.statValue}>{todaySymptoms.length}</Text>
             <Text style={styles.statLabel}>Symptoms</Text>
-          </View>
-          <View style={styles.statCard}>
+          </Card>
+          <Card style={styles.statCard} padding="lg" variant="elevated">
             <Text style={styles.statValue}>{alerts.length}</Text>
             <Text style={styles.statLabel}>Alerts</Text>
-          </View>
+          </Card>
         </View>
       </ScrollView>
     </View>
@@ -388,321 +451,311 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.neutral.backgroundLight,
+    backgroundColor: Theme.colors.background.secondary,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: Colors.neutral.backgroundLight,
+    backgroundColor: Theme.colors.background.secondary,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: Colors.neutral.mutedGray,
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.text.secondary,
+    marginTop: Theme.spacing.md,
+  },
+  headerGradient: {
+    paddingTop: Theme.spacing['5xl'],
+    paddingBottom: Theme.spacing['2xl'],
+    paddingHorizontal: Theme.spacing.lg,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-    backgroundColor: Colors.neutral.cardSurface,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
   },
   greeting: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: Colors.neutral.textDark,
-    marginBottom: 4,
+    ...Theme.typography.title,
+    fontSize: 28,
+    color: Theme.colors.text.primary,
+    marginBottom: Theme.spacing.xs,
   },
   date: {
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
-    fontWeight: "500",
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.text.secondary,
+    fontWeight: '500',
   },
   profileButton: {
-    padding: 8,
+    padding: Theme.spacing.xs,
+  },
+  profileIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Theme.colors.background.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Theme.shadows.card,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
+    padding: Theme.spacing.lg,
+    paddingBottom: Theme.spacing['3xl'],
   },
   section: {
-    marginBottom: 24,
+    marginBottom: Theme.spacing['2xl'],
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: Theme.spacing.md,
+  },
+  sectionIcon: {
+    marginRight: Theme.spacing.sm,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
+    ...Theme.typography.sectionTitle,
     flex: 1,
   },
-  mealCount: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: Colors.primary.green,
-    backgroundColor: `${Colors.primary.green}15`,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+  countBadge: {
+    backgroundColor: `${Theme.colors.primary.main}15`,
+    paddingHorizontal: Theme.spacing.md,
+    paddingVertical: Theme.spacing.xs,
+    borderRadius: Theme.radius.md,
+  },
+  countText: {
+    ...Theme.typography.bodySmall,
+    fontWeight: '600',
+    color: Theme.colors.primary.main,
   },
   // Quick Actions
   actionsRow: {
     flexDirection: "row",
+    gap: Theme.spacing.md,
   },
   actionButton: {
     flex: 1,
-    backgroundColor: Colors.neutral.cardSurface,
-    borderRadius: 16,
-    padding: 20,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    padding: Theme.spacing.xl,
   },
   actionIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 64,
+    height: 64,
+    borderRadius: Theme.radius['2xl'],
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: Theme.spacing.md,
+    ...Theme.shadows.button,
   },
   actionButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
+    ...Theme.typography.bodySmall,
+    fontWeight: '600',
+    color: Theme.colors.text.primary,
   },
   // Alerts
-  alertWrapper: {
-    marginBottom: 16,
-  },
-  alertMealInfo: {
-    backgroundColor: Colors.neutral.cardSurface,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#F0F0F0",
+  alertCard: {
+    marginBottom: Theme.spacing.md,
   },
   alertMealHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: Theme.spacing.sm,
   },
   alertMealType: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
-    marginLeft: 8,
+    ...Theme.typography.bodySmall,
+    fontWeight: '700',
+    color: Theme.colors.text.primary,
+    marginLeft: Theme.spacing.sm,
     flex: 1,
   },
   alertMealItems: {
-    fontSize: 13,
-    color: Colors.neutral.mutedGray,
-    lineHeight: 18,
+    ...Theme.typography.caption,
+    color: Theme.colors.text.secondary,
+    marginBottom: Theme.spacing.sm,
+    lineHeight: 20,
+  },
+  alertWarningContainer: {
+    marginTop: Theme.spacing.xs,
   },
   alertCountBadge: {
-    backgroundColor: Colors.primary.orange,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    minWidth: 24,
+    backgroundColor: Theme.colors.accent.orange,
+    borderRadius: Theme.radius.md,
+    paddingHorizontal: Theme.spacing.md,
+    paddingVertical: Theme.spacing.xs,
+    minWidth: 28,
     alignItems: "center",
   },
   alertCountText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    ...Theme.typography.captionSmall,
+    fontWeight: '700',
+    color: Theme.colors.text.inverse,
   },
   // Meals
   mealCard: {
-    backgroundColor: Colors.neutral.cardSurface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    marginBottom: Theme.spacing.md,
   },
   mealHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: Theme.spacing.md,
   },
   mealTypeContainer: {
     flexDirection: "row",
     alignItems: "center",
   },
+  mealIcon: {
+    marginRight: Theme.spacing.sm,
+  },
   mealType: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
+    ...Theme.typography.body,
+    fontWeight: '700',
+    color: Theme.colors.text.primary,
   },
   mealTime: {
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
-    fontWeight: "500",
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.text.secondary,
+    fontWeight: '500',
   },
   mealItems: {
+    gap: Theme.spacing.xs,
   },
   mealItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: Theme.spacing.sm,
+  },
+  mealItemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
+    borderBottomColor: Theme.colors.border.light,
   },
   mealItemName: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: Colors.neutral.textDark,
+    ...Theme.typography.body,
+    fontWeight: '500',
+    color: Theme.colors.text.primary,
     flex: 1,
   },
   mealItemKcal: {
-    fontSize: 13,
-    color: Colors.neutral.mutedGray,
-    fontWeight: "600",
+    ...Theme.typography.caption,
+    color: Theme.colors.text.secondary,
+    fontWeight: '600',
   },
   // Symptoms
   symptomsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginBottom: 12,
+    gap: Theme.spacing.sm,
+    marginBottom: Theme.spacing.md,
   },
   symptomChip: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.neutral.cardSurface,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    backgroundColor: Theme.colors.background.primary,
+    borderRadius: Theme.radius.xl,
+    paddingHorizontal: Theme.spacing.md,
+    paddingVertical: Theme.spacing.sm,
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: Theme.colors.border.light,
   },
   symptomName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
-    marginRight: 8,
+    ...Theme.typography.bodySmall,
+    fontWeight: '600',
+    color: Theme.colors.text.primary,
+    marginRight: Theme.spacing.sm,
   },
   severityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: Theme.spacing.sm,
+    paddingVertical: Theme.spacing.xs,
+    borderRadius: Theme.radius.sm,
   },
   severityMild: {
-    backgroundColor: `${Colors.primary.yellow}30`,
+    backgroundColor: `${Theme.colors.accent.yellow}30`,
   },
   severityModerate: {
-    backgroundColor: `${Colors.primary.orange}30`,
+    backgroundColor: `${Theme.colors.accent.orange}30`,
   },
   severitySevere: {
-    backgroundColor: `${Colors.primary.orange}50`,
+    backgroundColor: `${Theme.colors.accent.orange}50`,
   },
   severityText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
+    ...Theme.typography.captionSmall,
+    fontWeight: '700',
+    color: Theme.colors.text.primary,
     textTransform: "uppercase",
   },
   addSymptomButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Colors.neutral.cardSurface,
-    borderRadius: 12,
-    padding: 14,
+    backgroundColor: Theme.colors.background.primary,
+    borderRadius: Theme.radius.md,
+    padding: Theme.spacing.md,
     borderWidth: 2,
-    borderColor: Colors.primary.green,
+    borderColor: Theme.colors.primary.main,
     borderStyle: "dashed",
   },
+  addIcon: {
+    marginRight: Theme.spacing.sm,
+  },
   addSymptomText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.primary.green,
+    ...Theme.typography.bodySmall,
+    fontWeight: '600',
+    color: Theme.colors.primary.main,
   },
   removeSymptomButton: {
-    marginLeft: 8,
-    padding: 4,
+    marginLeft: Theme.spacing.sm,
+    padding: Theme.spacing.xs,
   },
   // Empty States
   emptyCard: {
-    backgroundColor: Colors.neutral.cardSurface,
-    borderRadius: 16,
-    padding: 32,
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#F0F0F0",
-    borderStyle: "dashed",
   },
   emptyText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
-    marginTop: 12,
-    marginBottom: 4,
+    ...Theme.typography.body,
+    fontWeight: '600',
+    color: Theme.colors.text.primary,
+    marginTop: Theme.spacing.md,
+    marginBottom: Theme.spacing.xs,
   },
   emptySubtext: {
-    fontSize: 13,
-    color: Colors.neutral.mutedGray,
+    ...Theme.typography.caption,
+    color: Theme.colors.text.secondary,
   },
   emptyButton: {
-    marginTop: 16,
-    backgroundColor: Colors.primary.green,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
+    marginTop: Theme.spacing.lg,
+    backgroundColor: Theme.colors.primary.main,
+    paddingHorizontal: Theme.spacing.xl,
+    paddingVertical: Theme.spacing.md,
+    borderRadius: Theme.radius.md,
+    ...Theme.shadows.button,
   },
   emptyButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
+    ...Theme.typography.button,
+    color: Theme.colors.text.inverse,
   },
   // Stats
   statsContainer: {
     flexDirection: "row",
-    marginTop: 8,
+    gap: Theme.spacing.md,
+    marginTop: Theme.spacing.sm,
   },
   statCard: {
     flex: 1,
-    backgroundColor: Colors.neutral.cardSurface,
-    borderRadius: 16,
-    padding: 20,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-    marginHorizontal: 6,
   },
   statValue: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: Colors.primary.green,
-    marginBottom: 4,
+    ...Theme.typography.title,
+    fontSize: 36,
+    color: Theme.colors.primary.main,
+    marginBottom: Theme.spacing.xs,
   },
   statLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Colors.neutral.mutedGray,
+    ...Theme.typography.captionSmall,
+    fontWeight: '600',
+    color: Theme.colors.text.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },

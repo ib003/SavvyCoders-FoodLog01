@@ -1,7 +1,11 @@
-import { auth } from "@/app/lib/auth";
-import { UserPreferences, preferences } from "@/app/lib/preferences";
-import { Colors } from "@/constants/Colors";
+import { Card } from "@/components/ui/Card";
+import { PrimaryButton } from "@/components/ui/PrimaryButton";
+import { Theme } from "@/constants/Theme";
+import { auth } from "@/src/lib/auth";
+import { UserPreferences, preferences } from "@/src/lib/preferences";
 import { FontAwesome } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -11,12 +15,11 @@ export default function Profile() {
   const [email, setEmail] = useState<string | null>(null);
   const [userPrefs, setUserPrefs] = useState<UserPreferences>({ allergies: [], dietaryPreferences: [] });
 
-  // Check authentication on mount (but allow dev mode bypass)
   useEffect(() => {
     const checkAuthAndLoad = async () => {
-      const isAuth = await auth.isAuthenticated();
-      // In dev mode, isAuthenticated returns true, so this won't redirect
-      if (!isAuth) {
+      const token = await auth.getToken();
+      if (!token || typeof token !== 'string' || token.length < 20) {
+        console.log("[Profile] No valid token, redirecting to login");
         router.replace("/");
         return;
       }
@@ -26,7 +29,6 @@ export default function Profile() {
     checkAuthAndLoad();
   }, []);
 
-  // Refresh preferences when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       loadPreferences();
@@ -66,8 +68,26 @@ export default function Profile() {
           text: "Sign Out",
           style: "destructive",
           onPress: async () => {
-            await auth.clear();
-            router.replace("/");
+            try {
+              console.log("[SignOut] Starting logout process...");
+              await auth.clear();
+              console.log("[SignOut] Auth data cleared");
+              await new Promise(resolve => setTimeout(resolve, 300));
+              const token = await auth.getToken();
+              if (token) {
+                console.warn("[SignOut] Token still exists after clear, forcing clear again");
+                await AsyncStorage.multiRemove(["auth_token", "user_email"]);
+                await new Promise(resolve => setTimeout(resolve, 200));
+              }
+              console.log("[SignOut] Navigating to login screen (/)...");
+              router.replace("/");
+              setTimeout(() => {
+                router.replace("/");
+              }, 100);
+            } catch (error) {
+              console.error("[SignOut] Error during sign out:", error);
+              router.replace("/");
+            }
           },
         },
       ]
@@ -92,13 +112,23 @@ export default function Profile() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Section with Gradient-like Background */}
-        <View style={styles.headerSection}>
+        {/* Header Section with Gradient */}
+        <LinearGradient
+          colors={[Theme.colors.primary.gradient[0], Theme.colors.primary.gradient[1]]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.headerSection}
+        >
           <View style={styles.headerContent}>
             <View style={styles.avatarContainer}>
-              <View style={styles.avatar}>
+              <LinearGradient
+                colors={[Theme.colors.background.primary, Theme.colors.background.secondary]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.avatar}
+              >
                 <Text style={styles.avatarText}>{getInitials(email)}</Text>
-              </View>
+              </LinearGradient>
               <View style={styles.avatarBadge}>
                 <FontAwesome name="check" size={12} color="#FFFFFF" />
               </View>
@@ -106,46 +136,46 @@ export default function Profile() {
             <Text style={styles.greeting}>Welcome back!</Text>
             <Text style={styles.userName}>{email?.split("@")[0] || "User"}</Text>
           </View>
-        </View>
+        </LinearGradient>
 
         {/* Account Information Card */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account Information</Text>
-          <View style={styles.card}>
+          <Card style={styles.card} padding="none" variant="elevated">
             <View style={styles.cardRow}>
-              <View style={styles.cardIconContainer}>
-                <FontAwesome name="envelope" size={18} color={Colors.primary.green} />
+              <View style={[styles.cardIconContainer, { backgroundColor: `${Theme.colors.primary.main}15` }]}>
+                <FontAwesome name="envelope" size={18} color={Theme.colors.primary.main} />
               </View>
               <View style={styles.cardContent}>
                 <Text style={styles.cardLabel}>Email Address</Text>
-                <Text style={[styles.cardValue, { marginTop: 2 }]} numberOfLines={1}>{email ?? "Not available"}</Text>
+                <Text style={styles.cardValue} numberOfLines={1}>{email ?? "Not available"}</Text>
               </View>
-              <FontAwesome name="chevron-right" size={16} color={Colors.neutral.mutedGray} />
+              <FontAwesome name="chevron-right" size={16} color={Theme.colors.text.tertiary} />
             </View>
-          </View>
+          </Card>
         </View>
 
         {/* Allergies & Dietary Preferences Card */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Health & Preferences</Text>
-          <View style={styles.card}>
+          <Card style={styles.card} padding="none" variant="elevated">
             <TouchableOpacity 
               style={styles.cardRow} 
               activeOpacity={0.7}
               onPress={() => router.push("/(tabs)/AllergiesPreferences")}
             >
-              <View style={[styles.cardIconContainer, { backgroundColor: `${Colors.primary.orange}15` }]}>
-                <FontAwesome name="exclamation-triangle" size={18} color={Colors.primary.orange} />
+              <View style={[styles.cardIconContainer, { backgroundColor: `${Theme.colors.accent.orange}20` }]}>
+                <FontAwesome name="exclamation-triangle" size={18} color={Theme.colors.accent.orange} />
               </View>
               <View style={styles.cardContent}>
                 <Text style={styles.cardLabel}>Allergies & Intolerances</Text>
-                <Text style={[styles.cardSubtext, { marginTop: 2 }]}>
+                <Text style={styles.cardSubtext}>
                   {userPrefs.allergies?.length > 0 
                     ? `${userPrefs.allergies.length} ${userPrefs.allergies.length === 1 ? 'allergy' : 'allergies'} set`
                     : "Not set"}
                 </Text>
               </View>
-              <FontAwesome name="chevron-right" size={16} color={Colors.neutral.mutedGray} />
+              <FontAwesome name="chevron-right" size={16} color={Theme.colors.text.tertiary} />
             </TouchableOpacity>
             
             <View style={styles.cardDivider} />
@@ -155,79 +185,76 @@ export default function Profile() {
               activeOpacity={0.7}
               onPress={() => router.push("/(tabs)/AllergiesPreferences")}
             >
-              <View style={[styles.cardIconContainer, { backgroundColor: `${Colors.primary.green}15` }]}>
-                <FontAwesome name="leaf" size={18} color={Colors.primary.green} />
+              <View style={[styles.cardIconContainer, { backgroundColor: `${Theme.colors.primary.main}15` }]}>
+                <FontAwesome name="leaf" size={18} color={Theme.colors.primary.main} />
               </View>
               <View style={styles.cardContent}>
                 <Text style={styles.cardLabel}>Dietary Preferences</Text>
-                <Text style={[styles.cardSubtext, { marginTop: 2 }]}>
+                <Text style={styles.cardSubtext}>
                   {userPrefs.dietaryPreferences?.length > 0 
                     ? `${userPrefs.dietaryPreferences.length} ${userPrefs.dietaryPreferences.length === 1 ? 'preference' : 'preferences'} set`
                     : "Not set"}
                 </Text>
               </View>
-              <FontAwesome name="chevron-right" size={16} color={Colors.neutral.mutedGray} />
+              <FontAwesome name="chevron-right" size={16} color={Theme.colors.text.tertiary} />
             </TouchableOpacity>
-          </View>
+          </Card>
         </View>
 
         {/* Security & Sync Card */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Security & Sync</Text>
-          <View style={styles.card}>
+          <Card style={styles.card} padding="none" variant="elevated">
             <TouchableOpacity style={styles.cardRow} activeOpacity={0.7}>
-              <View style={[styles.cardIconContainer, { backgroundColor: `${Colors.primary.green}15` }]}>
-                <FontAwesome name="lock" size={18} color={Colors.primary.green} />
+              <View style={[styles.cardIconContainer, { backgroundColor: `${Theme.colors.primary.main}15` }]}>
+                <FontAwesome name="lock" size={18} color={Theme.colors.primary.main} />
               </View>
               <View style={styles.cardContent}>
                 <Text style={styles.cardLabel}>Account Security</Text>
-                <Text style={[styles.cardSubtext, { marginTop: 2 }]}>Password protected</Text>
+                <Text style={styles.cardSubtext}>Password protected</Text>
               </View>
-              <FontAwesome name="chevron-right" size={16} color={Colors.neutral.mutedGray} />
+              <FontAwesome name="chevron-right" size={16} color={Theme.colors.text.tertiary} />
             </TouchableOpacity>
             
             <View style={styles.cardDivider} />
             
             <View style={styles.cardRow}>
-              <View style={[styles.cardIconContainer, { backgroundColor: `${Colors.primary.orange}15` }]}>
-                <FontAwesome name="cloud" size={18} color={Colors.primary.orange} />
+              <View style={[styles.cardIconContainer, { backgroundColor: `${Theme.colors.accent.orange}20` }]}>
+                <FontAwesome name="cloud" size={18} color={Theme.colors.accent.orange} />
               </View>
               <View style={styles.cardContent}>
                 <Text style={styles.cardLabel}>Cloud Sync</Text>
-                <Text style={[styles.cardSubtext, { marginTop: 2 }]}>Active across all devices</Text>
+                <Text style={styles.cardSubtext}>Active across all devices</Text>
               </View>
               <View style={styles.statusBadge}>
                 <View style={styles.statusDot} />
-                <Text style={[styles.statusText, { marginLeft: 6 }]}>Synced</Text>
+                <Text style={styles.statusText}>Synced</Text>
               </View>
             </View>
-          </View>
+          </Card>
         </View>
 
         {/* Info Banner */}
-        <View style={styles.infoBanner}>
+        <Card style={styles.infoBanner} padding="lg" variant="outlined">
           <View style={styles.infoIconContainer}>
-            <FontAwesome name="info-circle" size={20} color={Colors.primary.orange} />
+            <FontAwesome name="info-circle" size={20} color={Theme.colors.accent.orange} />
           </View>
           <View style={styles.infoContent}>
             <Text style={styles.infoTitle}>Your data is secure</Text>
-            <Text style={[styles.infoText, { marginTop: 4 }]}>
+            <Text style={styles.infoText}>
               All your information is encrypted and synced securely across all your devices.
             </Text>
           </View>
-        </View>
+        </Card>
 
         {/* Sign Out Button */}
-        <TouchableOpacity 
-          style={styles.logoutButton} 
+        <PrimaryButton
+          title="Sign Out"
           onPress={onLogout}
-          activeOpacity={0.8}
-        >
-          <View style={styles.logoutButtonContent}>
-            <FontAwesome name="sign-out" size={18} color="#FFFFFF" />
-            <Text style={styles.logoutButtonText}>Sign Out</Text>
-          </View>
-        </TouchableOpacity>
+          icon={<FontAwesome name="sign-out" size={18} color="#FFFFFF" />}
+          style={styles.logoutButton}
+          variant="solid"
+        />
 
         {/* Contact Support Link */}
         <TouchableOpacity 
@@ -235,7 +262,7 @@ export default function Profile() {
           onPress={handleContactSupport}
           activeOpacity={0.7}
         >
-          <FontAwesome name="envelope" size={16} color={Colors.primary.green} style={{ marginRight: 8 }} />
+          <FontAwesome name="envelope" size={16} color={Theme.colors.primary.main} style={styles.supportIcon} />
           <Text style={styles.supportLinkText}>Contact Support</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -246,55 +273,44 @@ export default function Profile() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.neutral.backgroundLight,
+    backgroundColor: Theme.colors.background.secondary,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 32,
+    paddingBottom: Theme.spacing['3xl'],
   },
-  // Header Section
   headerSection: {
-    backgroundColor: Colors.primary.green,
-    paddingTop: 60,
-    paddingBottom: 40,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    marginBottom: 24,
-    shadowColor: Colors.primary.green,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    paddingTop: Theme.spacing['5xl'],
+    paddingBottom: Theme.spacing['3xl'],
+    paddingHorizontal: Theme.spacing.lg,
+    borderBottomLeftRadius: Theme.radius['2xl'],
+    borderBottomRightRadius: Theme.radius['2xl'],
+    marginBottom: Theme.spacing['2xl'],
+    ...Theme.shadows.modal,
   },
   headerContent: {
     alignItems: "center",
   },
   avatarContainer: {
     position: "relative",
-    marginBottom: 16,
+    marginBottom: Theme.spacing.lg,
   },
   avatar: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: Colors.neutral.cardSurface,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 4,
-    borderColor: Colors.neutral.cardSurface,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
+    borderColor: Theme.colors.background.primary,
+    ...Theme.shadows.button,
   },
   avatarText: {
+    ...Theme.typography.title,
     fontSize: 36,
-    fontWeight: "800",
-    color: Colors.primary.green,
+    color: Theme.colors.primary.main,
     letterSpacing: 1,
   },
   avatarBadge: {
@@ -304,177 +320,142 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: Colors.primary.yellow,
+    backgroundColor: Theme.colors.accent.yellow,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 3,
-    borderColor: Colors.neutral.cardSurface,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    borderColor: Theme.colors.background.primary,
+    ...Theme.shadows.card,
   },
   greeting: {
-    fontSize: 16,
-    fontWeight: "600",
+    ...Theme.typography.bodySmall,
+    fontWeight: '600',
     color: "rgba(255, 255, 255, 0.9)",
-    marginBottom: 4,
+    marginBottom: Theme.spacing.xs,
   },
   userName: {
+    ...Theme.typography.sectionTitle,
     fontSize: 24,
-    fontWeight: "800",
     color: "#FFFFFF",
     textTransform: "capitalize",
   },
-  // Section Styles
   section: {
-    marginBottom: 24,
-    paddingHorizontal: 20,
+    marginBottom: Theme.spacing['2xl'],
+    paddingHorizontal: Theme.spacing.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
-    marginBottom: 12,
-    letterSpacing: 0.3,
+    ...Theme.typography.sectionTitle,
+    marginBottom: Theme.spacing.md,
   },
-  // Card Styles
   card: {
-    backgroundColor: Colors.neutral.cardSurface,
-    borderRadius: 16,
-    padding: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    overflow: 'hidden',
   },
   cardRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
+    padding: Theme.spacing.lg,
   },
   cardIconContainer: {
     width: 44,
     height: 44,
-    borderRadius: 12,
-    backgroundColor: `${Colors.primary.green}15`,
+    borderRadius: Theme.radius.md,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: Theme.spacing.md,
   },
   cardContent: {
     flex: 1,
   },
   cardLabel: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
-    marginBottom: 2,
+    ...Theme.typography.body,
+    fontWeight: '600',
+    color: Theme.colors.text.primary,
+    marginBottom: Theme.spacing.xs,
   },
   cardValue: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: Colors.neutral.mutedGray,
+    ...Theme.typography.bodySmall,
+    fontWeight: '500',
+    color: Theme.colors.text.secondary,
   },
   cardSubtext: {
-    fontSize: 13,
-    fontWeight: "400",
-    color: Colors.neutral.mutedGray,
+    ...Theme.typography.caption,
+    color: Theme.colors.text.secondary,
   },
   cardDivider: {
     height: 1,
-    backgroundColor: "#F0F0F0",
-    marginHorizontal: 16,
+    backgroundColor: Theme.colors.border.light,
+    marginHorizontal: Theme.spacing.lg,
   },
-  // Status Badge
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: `${Colors.primary.green}15`,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
+    backgroundColor: `${Theme.colors.primary.main}15`,
+    paddingHorizontal: Theme.spacing.md,
+    paddingVertical: Theme.spacing.sm,
+    borderRadius: Theme.radius.md,
   },
   statusDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.primary.green,
+    backgroundColor: Theme.colors.primary.main,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Colors.primary.green,
+    ...Theme.typography.captionSmall,
+    fontWeight: '600',
+    color: Theme.colors.primary.main,
+    marginLeft: Theme.spacing.xs,
   },
-  // Info Banner
   infoBanner: {
-    flexDirection: "row",
-    backgroundColor: Colors.neutral.cardSurface,
-    borderRadius: 16,
-    padding: 20,
-    marginHorizontal: 20,
-    marginBottom: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    marginHorizontal: Theme.spacing.lg,
+    marginBottom: Theme.spacing['2xl'],
     borderLeftWidth: 4,
-    borderLeftColor: Colors.primary.orange,
+    borderLeftColor: Theme.colors.accent.orange,
+    backgroundColor: `${Theme.colors.accent.orange}10`,
+    flexDirection: "row",
   },
   infoIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: `${Colors.primary.orange}15`,
+    backgroundColor: `${Theme.colors.accent.orange}20`,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
+    marginRight: Theme.spacing.md,
   },
   infoContent: {
     flex: 1,
   },
   infoTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
-    marginBottom: 4,
+    ...Theme.typography.body,
+    fontWeight: '700',
+    color: Theme.colors.text.primary,
+    marginBottom: Theme.spacing.xs,
   },
   infoText: {
-    fontSize: 13,
-    fontWeight: "400",
-    color: Colors.neutral.mutedGray,
+    ...Theme.typography.caption,
+    color: Theme.colors.text.secondary,
     lineHeight: 18,
   },
-  // Logout Button
   logoutButton: {
-    marginHorizontal: 20,
-    marginTop: 8,
-    borderRadius: 16,
-    backgroundColor: Colors.primary.orange,
-    shadowColor: Colors.primary.orange,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    overflow: "hidden",
+    marginHorizontal: Theme.spacing.lg,
+    marginTop: Theme.spacing.sm,
   },
-  logoutButtonContent: {
+  supportLink: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: 18,
-    gap: 10,
+    marginHorizontal: Theme.spacing.lg,
+    marginTop: Theme.spacing.lg,
+    marginBottom: Theme.spacing['2xl'],
+    paddingVertical: Theme.spacing.md,
   },
-  logoutButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+  supportIcon: {
+    marginRight: Theme.spacing.sm,
   },
-  //contact support
-  supportLink: { flexDirection: "row", alignItems: "center",justifyContent: "center", marginHorizontal: 20, marginTop: 16, marginBottom: 32, paddingVertical: 12 },
-  supportLinkText: { fontSize: 14, fontWeight: "600", color: Colors.primary.green,},
+  supportLinkText: {
+    ...Theme.typography.bodySmall,
+    fontWeight: '600',
+    color: Theme.colors.primary.main,
+  },
 });

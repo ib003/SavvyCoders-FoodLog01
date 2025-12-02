@@ -1,10 +1,19 @@
-import { auth } from "@/app/lib/auth";
-import { Colors } from "@/constants/Colors";
+import { auth } from "@/src/lib/auth";
+import { signInWithGoogle, signInWithApple } from "@/src/lib/oauth";
+import { useFadeIn, useScaleIn, useSlideInY } from "@/src/ui/animations";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { API_BASE } from "@/app/constants/api";
+import { useState } from "react";
+import { Animated, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { API_BASE } from "@/src/constants/api";
+import { Theme } from "@/constants/Theme";
+import { GradientScreen } from "@/components/ui/GradientScreen";
+import { PrimaryButton } from "@/components/ui/PrimaryButton";
+import { SecondaryButton } from "@/components/ui/SecondaryButton";
+import { TextField } from "@/components/ui/TextField";
+import { Card } from "@/components/ui/Card";
+import { Divider } from "@/components/ui/Divider";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function Register() {
   const router = useRouter();
@@ -14,16 +23,34 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
 
-  // If already logged in, redirect to dashboard
-  useEffect(() => {
-    (async () => {
-      const isAuth = await auth.isAuthenticated();
-      if (isAuth) {
-        router.replace("/(tabs)/Dashboard");
-      }
-    })();
-  }, []);
+  // Animations
+  const heroOpacity = useFadeIn(500, 100);
+  const heroSlide = useSlideInY(30, 500, 100);
+  const formScale = useScaleIn(400, 300);
+  const button1Opacity = useFadeIn(300, 500);
+  const button2Opacity = useFadeIn(300, 600);
+  const button3Opacity = useFadeIn(300, 700);
+
+  const validatePassword = (pwd: string) => {
+    if (pwd.length > 0 && pwd.length < 8) {
+      setPasswordError("Password must be at least 8 characters");
+      return false;
+    }
+    setPasswordError("");
+    return true;
+  };
+
+  const validateConfirmPassword = (confirm: string) => {
+    if (confirm.length > 0 && confirm !== password) {
+      setConfirmPasswordError("Passwords do not match");
+      return false;
+    }
+    setConfirmPasswordError("");
+    return true;
+  };
 
   const handleRegister = async () => {
     if (!email.trim() || !password || !confirmPassword) {
@@ -31,16 +58,14 @@ export default function Register() {
       return;
     }
 
-    // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
       Alert.alert("Invalid Email", "Please enter a valid email address.");
       return;
     }
 
-    // Password validation
-    if (password.length < 6) {
-      Alert.alert("Weak Password", "Password must be at least 6 characters long.");
+    if (password.length < 8) {
+      Alert.alert("Weak Password", "Password must be at least 8 characters long.");
       return;
     }
 
@@ -55,24 +80,40 @@ export default function Register() {
       if (result.token) {
         Alert.alert(
           "Success!",
-          "Your account has been created successfully.",
+          "Your account has been created successfully. You are now signed in.",
           [
             {
               text: "Get Started",
-              onPress: () => router.replace("/(tabs)/Dashboard"),
+              onPress: () => {
+                router.replace("/(tabs)/Dashboard");
+              },
             },
           ]
         );
+        setTimeout(() => {
+          router.replace("/(tabs)/Dashboard");
+        }, 2000);
+      } else {
+        throw new Error("No token received from server");
       }
     } catch (error: any) {
       console.error("Registration error:", error);
-      const errorMessage = error.message || "Unable to create account. Please try again.";
+      let errorMessage = error.message || "Unable to create account. Please try again.";
+      
+      if (errorMessage.includes("at least 8 characters")) {
+        errorMessage = "Password must be at least 8 characters long.";
+      } else if (errorMessage.includes("already exists") || errorMessage.includes("already registered")) {
+        errorMessage = "An account with this email already exists. Please sign in instead.";
+      } else if (errorMessage.includes("Invalid email")) {
+        errorMessage = "Please enter a valid email address.";
+      }
+      
       Alert.alert(
         "Registration Failed",
         errorMessage,
         [
           { text: "OK", style: "default" },
-          ...(errorMessage.includes("connect") ? [
+          ...(errorMessage.includes("connect") || errorMessage.includes("server") ? [
             { 
               text: "Check Server", 
               onPress: () => {
@@ -91,271 +132,280 @@ export default function Register() {
   };
 
   const handleOAuth = async (provider: "google" | "apple") => {
-    Alert.alert("OAuth Coming Soon", `${provider === "google" ? "Google" : "Apple"} sign-in will be available soon.`);
-    // TODO: Implement OAuth when expo-auth-session is configured
+    setLoading(true);
+    try {
+      const result = provider === "google" 
+        ? await signInWithGoogle()
+        : await signInWithApple();
+      
+      if (result.success && result.token) {
+        Alert.alert(
+          "Success!",
+          "You have been signed in successfully.",
+          [
+            {
+              text: "Get Started",
+              onPress: () => router.replace("/(tabs)/Dashboard"),
+            },
+          ]
+        );
+        setTimeout(() => {
+          router.replace("/(tabs)/Dashboard");
+        }, 2000);
+      } else {
+        Alert.alert(
+          "Sign In Failed",
+          result.error || `${provider === "google" ? "Google" : "Apple"} sign-in failed. Please try again.`
+        );
+      }
+    } catch (error: any) {
+      console.error("OAuth error:", error);
+      Alert.alert(
+        "Sign In Failed",
+        `Failed to sign in with ${provider === "google" ? "Google" : "Apple"}. Please try again.`
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+    <GradientScreen>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Sign up to get started</Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Hero Header */}
+          <Animated.View
+            style={[
+              styles.heroSection,
+              {
+                opacity: heroOpacity,
+                transform: [
+                  { translateY: heroSlide.translateY },
+                ],
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={[Theme.colors.primary.gradient[0], Theme.colors.primary.gradient[1]]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.iconContainer}
+            >
+              <FontAwesome name="user-plus" size={32} color="#FFFFFF" />
+            </LinearGradient>
+            <Text style={styles.heroTitle}>Create Account</Text>
+            <Text style={styles.heroSubtitle}>Join SavvyTrack and start tracking your health</Text>
+          </Animated.View>
 
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your email"
-              placeholderTextColor={Colors.neutral.mutedGray}
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-              editable={!loading}
-            />
-          </View>
+          {/* Form Card */}
+          <Animated.View
+            style={{
+              transform: [{ scale: formScale.scale }],
+              opacity: formScale.opacity,
+            }}
+          >
+            <Card style={styles.formCard} padding="2xl" variant="elevated">
+            <Text style={styles.formTitle}>Get Started</Text>
+            <Text style={styles.formSubtitle}>Fill in your details to create your account</Text>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.passwordContainer}>
-              <TextInput
-                style={styles.passwordInput}
+            <View style={styles.formFields}>
+              <TextField
+                label="Email"
+                placeholder="Enter your email"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                icon="envelope"
+                editable={!loading}
+              />
+
+              <TextField
+                label="Password"
                 placeholder="Create a password"
-                placeholderTextColor={Colors.neutral.mutedGray}
+                value={password}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  validatePassword(text);
+                  if (confirmPassword) validateConfirmPassword(confirmPassword);
+                }}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoComplete="password-new"
-                value={password}
-                onChangeText={setPassword}
+                icon="lock"
                 editable={!loading}
+                error={passwordError}
+                rightIcon={
+                  <Pressable onPress={() => setShowPassword(!showPassword)}>
+                    <FontAwesome
+                      name={showPassword ? "eye-slash" : "eye"}
+                      size={18}
+                      color={Theme.colors.text.tertiary}
+                    />
+                  </Pressable>
+                }
               />
-              <Pressable
-                style={styles.eyeIcon}
-                onPress={() => setShowPassword(!showPassword)}
-              >
-                <FontAwesome
-                  name={showPassword ? "eye-slash" : "eye"}
-                  size={20}
-                  color={Colors.neutral.mutedGray}
-                />
-              </Pressable>
-            </View>
-            <Text style={styles.hint}>Must be at least 6 characters</Text>
-          </View>
+              {!passwordError && (
+                <Text style={styles.hint}>Must be at least 8 characters</Text>
+              )}
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Confirm Password</Text>
-            <View style={styles.passwordContainer}>
-              <TextInput
-                style={styles.passwordInput}
+              <TextField
+                label="Confirm Password"
                 placeholder="Confirm your password"
-                placeholderTextColor={Colors.neutral.mutedGray}
+                value={confirmPassword}
+                onChangeText={(text) => {
+                  setConfirmPassword(text);
+                  validateConfirmPassword(text);
+                }}
                 secureTextEntry={!showConfirmPassword}
                 autoCapitalize="none"
                 autoComplete="password-new"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
+                icon="lock"
                 editable={!loading}
+                error={confirmPasswordError}
+                rightIcon={
+                  <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                    <FontAwesome
+                      name={showConfirmPassword ? "eye-slash" : "eye"}
+                      size={18}
+                      color={Theme.colors.text.tertiary}
+                    />
+                  </Pressable>
+                }
               />
-              <Pressable
-                style={styles.eyeIcon}
-                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-              >
-                <FontAwesome
-                  name={showConfirmPassword ? "eye-slash" : "eye"}
-                  size={20}
-                  color={Colors.neutral.mutedGray}
+
+              <Animated.View style={{ opacity: button1Opacity }}>
+                <PrimaryButton
+                  title="Create Account"
+                  onPress={handleRegister}
+                  loading={loading}
+                  disabled={loading}
+                  style={styles.createButton}
                 />
-              </Pressable>
+              </Animated.View>
+
+              <Divider text="OR" />
+
+              <Animated.View style={{ opacity: button2Opacity }}>
+                <SecondaryButton
+                  title="Continue with Google"
+                  onPress={() => handleOAuth("google")}
+                  disabled={loading}
+                  icon={<FontAwesome name="google" size={18} color={Theme.colors.text.primary} />}
+                  style={styles.oauthButton}
+                />
+              </Animated.View>
+
+              {Platform.OS === "ios" && (
+                <Animated.View style={{ opacity: button3Opacity }}>
+                  <SecondaryButton
+                    title="Continue with Apple"
+                    onPress={() => handleOAuth("apple")}
+                    disabled={loading}
+                    icon={<FontAwesome name="apple" size={18} color={Theme.colors.text.primary} />}
+                    style={styles.oauthButton}
+                  />
+                </Animated.View>
+              )}
+
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>Already have an account? </Text>
+                <Pressable onPress={() => router.back()} disabled={loading}>
+                  <Text style={styles.footerLink}>Sign In</Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
-
-          <Pressable
-            style={[styles.primaryButton, loading && styles.buttonDisabled]}
-            onPress={handleRegister}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Create Account</Text>
-            )}
-          </Pressable>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <Pressable
-            style={styles.oauthButton}
-            onPress={() => handleOAuth("google")}
-            disabled={loading}
-          >
-            <FontAwesome name="google" size={20} color={Colors.neutral.textDark} />
-            <Text style={styles.oauthButtonText}>Continue with Google</Text>
-          </Pressable>
-
-          {Platform.OS === "ios" && (
-            <Pressable
-              style={styles.oauthButton}
-              onPress={() => handleOAuth("apple")}
-              disabled={loading}
-            >
-              <FontAwesome name="apple" size={20} color={Colors.neutral.textDark} />
-              <Text style={styles.oauthButtonText}>Continue with Apple</Text>
-            </Pressable>
-          )}
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
-            <Pressable onPress={() => router.back()} disabled={loading}>
-              <Text style={styles.footerLink}>Sign In</Text>
-            </Pressable>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          </Card>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </GradientScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  keyboardView: {
     flex: 1,
-    backgroundColor: Colors.neutral.backgroundLight,
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: "center",
-    padding: 24,
+    paddingTop: Theme.spacing['4xl'],
+    paddingBottom: Theme.spacing['2xl'],
   },
-  header: {
-    alignItems: "center",
-    marginBottom: 40,
+  heroSection: {
+    alignItems: 'center',
+    marginBottom: Theme.spacing['3xl'],
   },
-  title: {
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: Theme.radius['2xl'],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Theme.spacing.lg,
+    ...Theme.shadows.button,
+  },
+  heroTitle: {
+    ...Theme.typography.title,
     fontSize: 36,
-    fontWeight: "800",
-    color: Colors.neutral.textDark,
-    marginBottom: 8,
+    color: Theme.colors.text.primary,
+    marginBottom: Theme.spacing.xs,
   },
-  subtitle: {
-    fontSize: 16,
-    color: Colors.neutral.mutedGray,
+  heroSubtitle: {
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.text.secondary,
+    textAlign: 'center',
+    paddingHorizontal: Theme.spacing.xl,
   },
-  form: {
-    gap: 20,
+  formCard: {
+    marginHorizontal: Theme.spacing.lg,
   },
-  inputContainer: {
-    gap: 8,
+  formTitle: {
+    ...Theme.typography.sectionTitle,
+    color: Theme.colors.text.primary,
+    marginBottom: Theme.spacing.xs,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
+  formSubtitle: {
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.text.secondary,
+    marginBottom: Theme.spacing['2xl'],
   },
-  input: {
-    backgroundColor: Colors.neutral.cardSurface,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: Colors.neutral.textDark,
-  },
-  passwordContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.neutral.cardSurface,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 12,
-  },
-  passwordInput: {
-    flex: 1,
-    padding: 16,
-    fontSize: 16,
-    color: Colors.neutral.textDark,
-  },
-  eyeIcon: {
-    padding: 16,
+  formFields: {
+    gap: Theme.spacing.md,
   },
   hint: {
-    fontSize: 12,
-    color: Colors.neutral.mutedGray,
-    marginTop: -4,
+    ...Theme.typography.captionSmall,
+    color: Theme.colors.text.tertiary,
+    marginTop: -Theme.spacing.md,
+    marginBottom: Theme.spacing.xs,
   },
-  primaryButton: {
-    backgroundColor: Colors.primary.green,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 8,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E0E0E0",
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
-    fontWeight: "500",
+  createButton: {
+    marginTop: Theme.spacing.sm,
   },
   oauthButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.neutral.cardSurface,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-  },
-  oauthButtonText: {
-    color: Colors.neutral.textDark,
-    fontSize: 16,
-    fontWeight: "600",
+    marginTop: Theme.spacing.xs,
   },
   footer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: Theme.spacing.lg,
+    paddingTop: Theme.spacing.lg,
   },
   footerText: {
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.text.secondary,
   },
   footerLink: {
-    fontSize: 14,
-    color: Colors.primary.green,
-    fontWeight: "600",
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.primary.main,
+    fontWeight: '600',
   },
 });
-

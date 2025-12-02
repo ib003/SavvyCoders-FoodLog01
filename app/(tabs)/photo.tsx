@@ -1,4 +1,4 @@
-import { auth } from "@/app/lib/auth";
+import { auth } from "@/src/lib/auth";
 import { Colors } from "@/constants/Colors";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";

@@ -1,6 +1,6 @@
-import { API_BASE } from "@/app/constants/api";
-import { analyzeFood } from "@/app/lib/allergenChecker";
-import { auth } from "@/app/lib/auth";
+import { API_BASE } from "@/src/constants/api";
+import { analyzeFood } from "@/src/lib/allergenChecker";
+import { auth } from "@/src/lib/auth";
 import AllergenWarning from "@/components/AllergenWarning";
 import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";

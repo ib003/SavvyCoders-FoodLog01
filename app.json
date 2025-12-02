@@ -15,9 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.savvytracker.app",
       "infoPlist": {
         "NSCameraUsageDescription": "This app needs access to your camera to scan barcodes and check product safety."
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -42,7 +44,8 @@
         {
           "cameraPermission": "Allow SavvyTracker to access your camera to scan barcodes."
         }
-      ]
+      ],
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true
