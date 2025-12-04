@@ -8,16 +8,16 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 interface Food {
@@ -35,6 +35,7 @@ export default function AddBarcode() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [manualScan, setManualScan] = useState(false);
   const [food, setFood] = useState<Food | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -188,6 +189,27 @@ export default function AddBarcode() {
     );
   }
 
+  // One-shot manual capture: enable manualScan for a short window so the
+  // camera will invoke `handleBarCodeScanned` once a barcode is detected.
+  const triggerOneShotScan = () => {
+    if (scanning || scanned) return;
+    setManualScan(true);
+    setError(null);
+    // disable after 8s and notify if nothing found
+    setTimeout(() => {
+      if (!scanned) {
+        setManualScan(false);
+        setError("No barcode detected");
+        Alert.alert(
+          "No barcode detected",
+          "We couldn't find a barcode. Try moving the camera closer and try again."
+        );
+      } else {
+        setManualScan(false);
+      }
+    }, 8000);
+  };
+
   return (
     <View style={styles.container}>
       {/* Camera View */}
@@ -197,7 +219,7 @@ export default function AddBarcode() {
         barcodeScannerSettings={{
           barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e"],
         }}
-        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+        onBarcodeScanned={manualScan && !scanned ? handleBarCodeScanned : undefined}
       >
         {/* Overlay */}
         <View style={styles.overlay}>
@@ -242,6 +264,15 @@ export default function AddBarcode() {
               <TouchableOpacity style={styles.scanAgainButton} onPress={handleReset}>
                 <FontAwesome name="refresh" size={18} color="#FFFFFF" />
                 <Text style={styles.scanAgainText}>Scan Again</Text>
+              </TouchableOpacity>
+            )}
+            {!loading && !error && !scanned && (
+              <TouchableOpacity
+                style={[styles.captureButton, manualScan ? styles.captureButtonActive : {}]}
+                onPress={triggerOneShotScan}
+              >
+                <FontAwesome name="camera" size={18} color="#FFFFFF" />
+                <Text style={styles.captureButtonText}>{manualScan ? "Scanning..." : "Capture"}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -646,5 +677,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+  captureButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.primary.green,
+    borderRadius: 30,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    marginTop: 12,
+  },
+  captureButtonActive: {
+    backgroundColor: Colors.primary.orange,
+  },
+  captureButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+    marginLeft: 8,
   },
 });
