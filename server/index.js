@@ -417,12 +417,74 @@ app.get("/foods", async (req, res) => {
 });
 
 app.get("/barcode/:upc", async (req, res) => {
-  const b = await prisma.barcode.findUnique({
-    where: { upc: req.params.upc },
-    include: { food: true },
+  try {
+    const upc = req.params.upc;
+
+    // Try to find an existing Food by its barcode
+    let food = await prisma.food.findUnique({ where: { barcode: upc } });
+    if (food) {
+      return res.json(food);
+    }
+
+    // If not found locally, try OpenFoodFacts (public UPC/product database)
+    // Example: https://world.openfoodfacts.org/api/v0/product/737628064502.json
+    const ofUrl = `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(upc)}.json`;
+    const ofResp = await fetch(ofUrl);
+    if (!ofResp.ok) {
+      return res.status(404).end();
+    }
+    const ofData = await ofResp.json();
+    if (ofData.status !== 1 || !ofData.product) {
+      return res.status(404).end();
+    }
+
+    const p = ofData.product;
+    const name = p.product_name || p.generic_name || p.name || `Product ${upc}`;
+    const brand = p.brands || null;
+
+    // Try to get calories per serving or per 100g
+    const nutr = p.nutriments || {};
+    const kcal = (
+      nutr['energy-kcal_serving'] ?? nutr['energy-kcal_100g'] ?? nutr['energy_serving'] ?? nutr['energy_100g'] ?? null
+    );
+
+    // Use serving_size as a human readable unit (e.g., "100 g" or "1 serving")
+    const servingSizeRaw = p.serving_size || null;
+
+    // Create a new Food record from the external product
+    const created = await prisma.food.create({
+      data: {
+        name: name,
+        brand: brand,
+        description: p.generic_name || p.labels || null,
+        servingSize: null,
+        servingUnit: servingSizeRaw,
+        calories: kcal ? Number(kcal) : null,
+        barcode: upc,
+        imageUrl: p.image_front_small_url || p.image_url || null,
+        source: 'UPC_API',
+        externalId: p.code || null,
+      },
+    });
+
+    return res.json(created);
+  } catch (err) {
+    console.error('Barcode lookup error:', err);
+    return res.status(500).json({ error: 'Failed to lookup barcode' });
+  }
+});
+
+
+app.post("/barcode/decode", async (req, res) => {
+
+  res.status(501).json({
+    error: "not_implemented",
+    message:
+      "Image barcode decoding is not implemented on this server.\n" +
+      "You can either: (1) POST to a third-party barcode-decoding API,\n" +
+      "(2) implement a decoder here (e.g., using zxing-js + canvas or zbar),\n" +
+      "or (3) send the numeric barcode string to GET /barcode/:code instead.",
   });
-  if (!b) return res.status(404).end();
-  res.json(b.food);
 });
 
 // --- Meals ---
