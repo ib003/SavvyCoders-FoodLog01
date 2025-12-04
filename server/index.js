@@ -7,6 +7,8 @@ const { OAuth2Client } = require("google-auth-library");
 const jwksClient = require("jwks-rsa");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
+const OpenAI = require("openai");
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Initialize Google OAuth client
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -53,7 +55,7 @@ async function verifyAppleToken(identityToken) {
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "20mb" }));
 
 // bearer auth middleware
 function auth(req, res, next) {
@@ -539,6 +541,199 @@ app.get("/meals", auth, async (req, res) => {
   });
   res.json(meals);
 });
+
+// --- AI Food Analysis ---
+// --- AI Food Analysis ---
+app.post("/api/analyze-food", async (req, res) =>
+{
+const image = req.body.image
+
+if (!image)
+{
+return res.status(400).json({ error: "missing image" })
+}
+
+let dataUrl = image
+if (!dataUrl.startsWith("data:"))
+{
+dataUrl = "data:image/jpeg;base64," + dataUrl
+}
+
+//this object will hold the final ai estimate for the food in the picture
+let result =
+{
+name: "unknown food",
+calories: 0,
+protein: 0,
+carbs: 0,
+fat: 0,
+ingredients: []
+}
+
+try
+{
+//this is the prompt i give ChatGPT to get the estimate  
+const promptText = "you see a photo of food. estimate the dish name, total calories, grams of protein, grams of carbs, grams of fat, and a short list of ingredients. respond only with json using keys name, calories, protein, carbs, fat, ingredients where ingredients is an array of strings"
+
+const aiRes = await openai.responses.create({
+model: "gpt-4.1-mini",
+input: [
+{
+role: "user",
+content: [
+{ type: "input_text", text: promptText },
+{ type: "input_image", image_url: dataUrl }
+]
+}
+]
+})
+
+let aiText = null
+
+//this if statement checks if the output i got from ChatGPT is in the right format/is usable
+if (aiRes && aiRes.output && aiRes.output[0] && aiRes.output[0].content && aiRes.output[0].content[0] && aiRes.output[0].content[0].text)
+{
+aiText = aiRes.output[0].content[0].text
+}
+
+//if aitext is not null, that means the previous check was fine
+if (aiText)
+{
+try
+{
+const parsed = JSON.parse(aiText)
+result.name = parsed.name || result.name
+result.calories = parsed.calories || result.calories
+result.protein = parsed.protein || result.protein
+result.carbs = parsed.carbs || result.carbs
+result.fat = parsed.fat || result.fat
+result.ingredients = parsed.ingredients || result.ingredients
+}
+catch (e)
+{
+console.error("json parse error", e)
+}
+}
+}
+catch (err)
+{
+console.error("ai error", err)
+}
+//stuff above is just broad error catching
+if (!result || !result.name)
+{
+return res.status(500).json({ error: "ai failed to analyze image" })
+}
+
+//this function normalizes what the ai gave us to usable food object
+function normalizeFood(result)
+{
+  if (!result)
+  {
+  return null
+  }
+  
+  if (typeof result !== "object")
+{
+return null
+}
+
+let calories = Number(result.calories)
+//all of these if statements below just make sure the avlues they get are positive, usable numbers
+if (isNaN(calories) || calories < 0)
+{
+calories = 0
+}
+
+let protein = Number(result.protein)
+if (isNaN(protein) || protein < 0)
+{
+protein = 0
+}
+
+let carbs = Number(result.carbs)
+if (isNaN(carbs) || carbs < 0)
+{
+carbs = 0
+}
+
+let fat = Number(result.fat)
+if (isNaN(fat) || fat < 0)
+{
+fat = 0
+}
+
+let ingredients = []
+if (Array.isArray(result.ingredients))
+{
+ingredients = result.ingredients.map((item) =>
+{
+if (typeof item === "string")
+{
+return item
+}
+return String(item)
+})
+}
+
+//we aren't using result.value for these values anymore because they all got tested and if need be, cleaned in the if statements above
+return {
+name: result.name || "unknown",
+calories: calories,
+protein: protein,
+carbs: carbs,
+fat: fat,
+ingredients: ingredients
+}
+}
+
+//replacing saveFood with a dummy function because the Postgre server didn't get set up, and I can't be bothered to do that today
+async function saveFood(food)
+{
+return null
+}
+
+//this function saves the normalized food to the database so we can reuse it later
+/*async function saveFood(food)
+{
+if (!food || !food.name)
+{
+return null
+}
+
+let saved = null
+
+try
+{
+saved = await prisma.food.create({
+data:
+{
+name: food.name,
+calories: food.calories
+}
+})
+}
+catch (e)
+{
+console.error("db error", e)
+return null
+}
+
+return saved
+}*/
+
+//in case normalizeFood returns NULL, we return an error message
+const clean = normalizeFood(result)
+
+if (!clean)
+{
+return res.status(500).json({ error: "ai result invalid" })
+}
+
+const saved = await saveFood(clean)
+
+res.json(saved || clean)
+})
 
 // --- User Preferences ---
 app.get("/user/preferences", auth, async (req, res) => {
