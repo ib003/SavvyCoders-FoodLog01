@@ -55,7 +55,7 @@ async function verifyAppleToken(identityToken) {
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "20mb" }));
 
 // bearer auth middleware
 function auth(req, res, next) {
@@ -481,6 +481,7 @@ app.get("/meals", auth, async (req, res) => {
 });
 
 // --- AI Food Analysis ---
+// --- AI Food Analysis ---
 app.post("/api/analyze-food", async (req, res) =>
 {
 const image = req.body.image
@@ -513,7 +514,6 @@ try
 const promptText = "you see a photo of food. estimate the dish name, total calories, grams of protein, grams of carbs, grams of fat, and a short list of ingredients. respond only with json using keys name, calories, protein, carbs, fat, ingredients where ingredients is an array of strings"
 
 const aiRes = await openai.responses.create({
-//using older model cause it's free
 model: "gpt-4.1-mini",
 input: [
 {
@@ -523,8 +523,7 @@ content: [
 { type: "input_image", image_url: dataUrl }
 ]
 }
-],
-response_format: { type: "json_object" }
+]
 })
 
 let aiText = null
@@ -626,8 +625,14 @@ ingredients: ingredients
 }
 }
 
-//this function saves the normalized food to the database so we can reuse it later
+//replacing saveFood with a dummy function because the Postgre server didn't get set up, and I can't be bothered to do that today
 async function saveFood(food)
+{
+return null
+}
+
+//this function saves the normalized food to the database so we can reuse it later
+/*async function saveFood(food)
 {
 if (!food || !food.name)
 {
@@ -653,7 +658,7 @@ return null
 }
 
 return saved
-}
+}*/
 
 //in case normalizeFood returns NULL, we return an error message
 const clean = normalizeFood(result)
