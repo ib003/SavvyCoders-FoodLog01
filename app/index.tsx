@@ -147,6 +147,13 @@ export default function Login() {
     }
   };
 
+  const handleSkipLoginDev = () => {
+    (auth as any).getToken = async () => "dev-demo-token-12345678901234567890";
+    (auth as any).isAuthenticated = async () => true;
+
+    router.replace("/(tabs)/Dashboard");
+  };
+
   return (
     <GradientScreen>
       <KeyboardAvoidingView
@@ -248,6 +255,22 @@ export default function Login() {
                   style={styles.oauthButton}
                 />
               </Animated.View>
+
+              <Pressable
+                onPress={handleSkipLoginDev}
+                disabled={loading}
+                style={{ marginTop: Theme.spacing.md, alignItems: "center" }}
+              >
+                <Text
+                  style={{
+                    ...Theme.typography.captionSmall,
+                    color: Theme.colors.text.secondary,
+                    textDecorationLine: "underline",
+                  }}
+                >
+                  Skip login for demo
+                </Text>
+              </Pressable>
 
               {Platform.OS === "ios" && (
                 <Animated.View style={{ opacity: button3Opacity }}>
