@@ -1,6 +1,6 @@
-import { auth } from "@/app/lib/auth";
-import { UserPreferences, preferences } from "@/app/lib/preferences";
 import { Colors } from "@/constants/Colors";
+import { auth } from "@/lib/auth";
+import { UserPreferences, preferences } from "@/lib/preferences";
 import { FontAwesome } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";

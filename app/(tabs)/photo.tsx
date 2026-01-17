@@ -1,5 +1,5 @@
-import { auth } from "@/app/lib/auth";
 import { Colors } from "@/constants/Colors";
+import { auth } from "@/lib/auth";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
@@ -11,7 +11,7 @@ export default function AddPhoto() {
   useEffect(() => {
     const checkAuth = async () => {
       const isAuth = await auth.isAuthenticated();
-      if (!isAuth) router.replace("/");
+      router.replace("/(auth)");
     };
     checkAuth();
   }, []);

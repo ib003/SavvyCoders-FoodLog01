@@ -1,5 +1,4 @@
 import { Alert } from "react-native";
-import { API_BASE } from "@/app/constants/api";
 import { auth } from "./auth";
 
 /**

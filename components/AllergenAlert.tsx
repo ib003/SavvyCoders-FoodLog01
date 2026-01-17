@@ -1,14 +1,14 @@
-import { analyzeFood } from "@/app/lib/allergenChecker";
 import { Colors } from "@/constants/Colors";
+import { analyzeFood } from "@/lib/allergenChecker";
 import { FontAwesome } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
 import {
-    Animated,
-    Easing,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  Easing,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 interface AllergenAlertProps {

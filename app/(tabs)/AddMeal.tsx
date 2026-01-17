@@ -1,5 +1,5 @@
-import { auth } from "@/app/lib/auth";
 import { Colors } from "@/constants/Colors";
+import { auth } from "@/lib/auth";
 import { FontAwesome } from "@expo/vector-icons";
 import { Href, useRouter } from "expo-router";
 import React, { useEffect } from "react";

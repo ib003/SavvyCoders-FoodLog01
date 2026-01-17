@@ -1,9 +1,9 @@
-import { API_BASE } from "@/app/constants/api";
-import { analyzeFood } from "@/app/lib/allergenChecker";
-import { auth } from "@/app/lib/auth";
-import { preferences } from "@/app/lib/preferences";
 import AllergenWarning from "@/components/AllergenWarning";
+import { API_BASE } from "@/constants/api";
 import { Colors } from "@/constants/Colors";
+import { analyzeFood } from "@/lib/allergenChecker";
+import { auth } from "@/lib/auth";
+import { preferences } from "@/lib/preferences";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";

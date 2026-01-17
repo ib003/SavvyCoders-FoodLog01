@@ -1,6 +1,6 @@
-import { API_BASE } from "@/app/constants/api";
-import { auth } from "@/app/lib/auth";
+import { API_BASE } from "@/constants/api";
 import { Colors } from "@/constants/Colors";
+import { auth } from "@/lib/auth";
 import { FontAwesome } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";

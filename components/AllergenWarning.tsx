@@ -1,13 +1,13 @@
 import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
-import { 
-  Animated, 
-  StyleSheet, 
-  Text, 
-  TouchableOpacity, 
-  View,
-  Easing,
+import {
+    Animated,
+    Easing,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 interface AllergenWarningProps {

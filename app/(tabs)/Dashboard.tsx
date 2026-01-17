@@ -1,15 +1,24 @@
-import { API_BASE } from "@/app/constants/api";
-import { analyzeFood } from "@/app/lib/allergenChecker";
-import { auth } from "@/app/lib/auth";
-import { preferences } from "@/app/lib/preferences";
-import { Symptom, symptoms } from "@/app/lib/symptoms";
+import { API_BASE } from "@/constants/api";
+import { analyzeFood } from "@/lib/allergenChecker";
+import { auth } from "@/lib/auth";
+import { preferences } from "@/lib/preferences";
+import { Symptom, symptoms } from "@/lib/symptoms";
 import AllergenWarning from "@/components/AllergenWarning";
 import NutritionInsights from "@/components/NutritionInsights";
 import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 interface Meal {
   id: string;
@@ -46,20 +55,27 @@ export default function DashboardScreen() {
   const [todaySymptoms, setTodaySymptoms] = useState<Symptom[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
 
-  //check authentication on mount
+  // check authentication on mount
   useEffect(() => {
     const checkAuthAndLoad = async () => {
-      const isAuth = await auth.isAuthenticated();
-      if (!isAuth) {
+      try {
+        const isAuth = await auth.isAuthenticated();
+        if (!isAuth) {
+          router.replace("/");
+          return;
+        }
+        await loadDashboardData();
+      } catch (e) {
+        console.error("Auth check error:", e);
         router.replace("/");
-        return;
       }
-      loadDashboardData();
     };
+
     checkAuthAndLoad();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  //refresh symptoms when screen comes into focus
+  // refresh symptoms when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       loadTodaySymptoms();
@@ -84,6 +100,7 @@ export default function DashboardScreen() {
       if (!token) return;
 
       const today = new Date().toISOString().split("T")[0];
+
       const response = await fetch(`${API_BASE}/meals?date=${today}`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -94,6 +111,8 @@ export default function DashboardScreen() {
         const meals = await response.json();
         setTodayMeals(meals);
         await checkAlerts(meals);
+      } else {
+        console.warn("Meals fetch failed:", response.status);
       }
     } catch (error) {
       console.error("Failed to load meals:", error);
@@ -105,16 +124,17 @@ export default function DashboardScreen() {
     const alertsList: AlertItem[] = [];
 
     for (const meal of meals) {
-      //collect all food tags/names for this meal
-      const foodNames = meal.items.map(item => item.food.name);
-      //for now we use food names as tags - in production you would have actual allergen tags
+      // collect all food names for this meal
+      // ✅ ensure we pass clean strings (no trim errors)
+      const foodNames = meal.items
+        .map((item) => (item?.food?.name ?? "").toString())
+        .map((n) => n.trim())
+        .filter(Boolean);
+
       const analysis = await analyzeFood(foodNames, userPrefs);
-      
+
       if (analysis.hasAllergenWarning || analysis.hasDietaryConflict) {
-        alertsList.push({
-          meal,
-          analysis,
-        });
+        alertsList.push({ meal, analysis });
       }
     }
 
@@ -141,7 +161,7 @@ export default function DashboardScreen() {
   };
 
   const getMealTypeIcon = (mealType: string) => {
-    const type = mealType.toLowerCase();
+    const type = (mealType ?? "").toLowerCase();
     if (type.includes("breakfast")) return "coffee";
     if (type.includes("lunch")) return "sun-o";
     if (type.includes("dinner")) return "moon-o";
@@ -150,7 +170,9 @@ export default function DashboardScreen() {
   };
 
   const getMealTypeLabel = (mealType: string) => {
-    return mealType.charAt(0).toUpperCase() + mealType.slice(1);
+    const safe = (mealType ?? "").toString();
+    if (!safe) return "Meal";
+    return safe.charAt(0).toUpperCase() + safe.slice(1);
   };
 
   const formatTime = (dateString: string) => {
@@ -181,7 +203,15 @@ export default function DashboardScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Good {new Date().getHours() < 12 ? "Morning" : new Date().getHours() < 18 ? "Afternoon" : "Evening"}!</Text>
+          <Text style={styles.greeting}>
+            Good{" "}
+            {new Date().getHours() < 12
+              ? "Morning"
+              : new Date().getHours() < 18
+              ? "Afternoon"
+              : "Evening"}
+            !
+          </Text>
           <Text style={styles.date}>{getTodayDate()}</Text>
         </View>
         <TouchableOpacity
@@ -195,7 +225,13 @@ export default function DashboardScreen() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary.green} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.primary.green}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         {/* Quick Actions */}
@@ -207,7 +243,12 @@ export default function DashboardScreen() {
               onPress={() => router.push("/(tabs)/AddMeal")}
               activeOpacity={0.8}
             >
-              <View style={[styles.actionIconContainer, { backgroundColor: `${Colors.primary.green}15` }]}>
+              <View
+                style={[
+                  styles.actionIconContainer,
+                  { backgroundColor: `${Colors.primary.green}15` },
+                ]}
+              >
                 <FontAwesome name="plus-circle" size={24} color={Colors.primary.green} />
               </View>
               <Text style={styles.actionButtonText}>Add Meal</Text>
@@ -218,8 +259,17 @@ export default function DashboardScreen() {
               onPress={() => router.push("/(tabs)/AllergiesPreferences")}
               activeOpacity={0.8}
             >
-              <View style={[styles.actionIconContainer, { backgroundColor: `${Colors.primary.orange}15` }]}>
-                <FontAwesome name="exclamation-triangle" size={24} color={Colors.primary.orange} />
+              <View
+                style={[
+                  styles.actionIconContainer,
+                  { backgroundColor: `${Colors.primary.orange}15` },
+                ]}
+              >
+                <FontAwesome
+                  name="exclamation-triangle"
+                  size={24}
+                  color={Colors.primary.orange}
+                />
               </View>
               <Text style={styles.actionButtonText}>Allergies</Text>
             </TouchableOpacity>
@@ -235,27 +285,27 @@ export default function DashboardScreen() {
                 <Text style={styles.alertCountText}>{alerts.length}</Text>
               </View>
             </View>
+
             {alerts.map((alert, index) => (
               <View key={index} style={styles.alertWrapper}>
                 <View style={styles.alertMealInfo}>
                   <View style={styles.alertMealHeader}>
-                    <FontAwesome 
-                      name={getMealTypeIcon(alert.meal.mealType) as any} 
-                      size={16} 
-                      color={Colors.primary.orange} 
+                    <FontAwesome
+                      name={getMealTypeIcon(alert.meal.mealType) as any}
+                      size={16}
+                      color={Colors.primary.orange}
                     />
                     <Text style={styles.alertMealType}>
-                      {getMealTypeLabel(alert.meal.mealType)} • {formatTime(alert.meal.occurredAt)}
+                      {getMealTypeLabel(alert.meal.mealType)} •{" "}
+                      {formatTime(alert.meal.occurredAt)}
                     </Text>
                   </View>
                   <Text style={styles.alertMealItems} numberOfLines={2}>
-                    {alert.meal.items.map(item => item.food.name).join(", ")}
+                    {alert.meal.items.map((item) => item.food.name).join(", ")}
                   </Text>
                 </View>
-                <AllergenWarning 
-                  analysis={alert.analysis} 
-                  variant="banner"
-                />
+
+                <AllergenWarning analysis={alert.analysis} variant="banner" />
               </View>
             ))}
           </View>
@@ -264,7 +314,12 @@ export default function DashboardScreen() {
         {/* Today's Meals */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FontAwesome name="cutlery" size={20} color={Colors.primary.green} style={{ marginRight: 8 }} />
+            <FontAwesome
+              name="cutlery"
+              size={20}
+              color={Colors.primary.green}
+              style={{ marginRight: 8 }}
+            />
             <Text style={styles.sectionTitle}>Today's Meals</Text>
             <Text style={styles.mealCount}>{todayMeals.length}</Text>
           </View>
@@ -286,7 +341,7 @@ export default function DashboardScreen() {
                 <View style={styles.mealHeader}>
                   <View style={styles.mealTypeContainer}>
                     <FontAwesome
-                      name={getMealTypeIcon(meal.mealType)}
+                      name={getMealTypeIcon(meal.mealType) as any}
                       size={18}
                       color={Colors.primary.green}
                       style={{ marginRight: 8 }}
@@ -297,7 +352,7 @@ export default function DashboardScreen() {
                 </View>
 
                 <View style={styles.mealItems}>
-                  {meal.items.map((item, index) => (
+                  {meal.items.map((item) => (
                     <View key={item.food.id} style={styles.mealItem}>
                       <Text style={styles.mealItemName}>{item.food.name}</Text>
                       {item.food.kcal && (
@@ -314,7 +369,12 @@ export default function DashboardScreen() {
         {/* Symptoms Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FontAwesome name="heartbeat" size={20} color={Colors.primary.orange} style={{ marginRight: 8 }} />
+            <FontAwesome
+              name="heartbeat"
+              size={20}
+              color={Colors.primary.orange}
+              style={{ marginRight: 8 }}
+            />
             <Text style={styles.sectionTitle}>Today's Symptoms</Text>
             <Text style={styles.mealCount}>{todaySymptoms.length}</Text>
           </View>
@@ -328,7 +388,10 @@ export default function DashboardScreen() {
           ) : (
             <View style={styles.symptomsContainer}>
               {todaySymptoms.map((symptom) => (
-                <View key={symptom.id} style={[styles.symptomChip, { marginRight: 8, marginBottom: 8 }]}>
+                <View
+                  key={symptom.id}
+                  style={[styles.symptomChip, { marginRight: 8, marginBottom: 8 }]}
+                >
                   <Text style={styles.symptomName}>{symptom.name}</Text>
                   <View
                     style={[
@@ -357,7 +420,12 @@ export default function DashboardScreen() {
             onPress={() => router.push("/symptom")}
             activeOpacity={0.8}
           >
-            <FontAwesome name="plus" size={16} color={Colors.primary.green} style={{ marginRight: 8 }} />
+            <FontAwesome
+              name="plus"
+              size={16}
+              color={Colors.primary.green}
+              style={{ marginRight: 8 }}
+            />
             <Text style={styles.addSymptomText}>Add Symptom</Text>
           </TouchableOpacity>
         </View>
@@ -386,21 +454,14 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.neutral.backgroundLight,
-  },
+  container: { flex: 1, backgroundColor: Colors.neutral.backgroundLight },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: Colors.neutral.backgroundLight,
   },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: Colors.neutral.mutedGray,
-  },
+  loadingText: { marginTop: 12, fontSize: 16, color: Colors.neutral.mutedGray },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -412,41 +473,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
-  greeting: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: Colors.neutral.textDark,
-    marginBottom: 4,
-  },
-  date: {
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
-    fontWeight: "500",
-  },
-  profileButton: {
-    padding: 8,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
-    flex: 1,
-  },
+  greeting: { fontSize: 24, fontWeight: "800", color: Colors.neutral.textDark, marginBottom: 4 },
+  date: { fontSize: 14, color: Colors.neutral.mutedGray, fontWeight: "500" },
+  profileButton: { padding: 8 },
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 20, paddingBottom: 40 },
+  section: { marginBottom: 24 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  sectionTitle: { fontSize: 20, fontWeight: "700", color: Colors.neutral.textDark, flex: 1 },
   mealCount: {
     fontSize: 16,
     fontWeight: "600",
@@ -456,10 +490,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
-  // Quick Actions
-  actionsRow: {
-    flexDirection: "row",
-  },
+  actionsRow: { flexDirection: "row" },
   actionButton: {
     flex: 1,
     backgroundColor: Colors.neutral.cardSurface,
@@ -480,15 +511,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  actionButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
-  },
-  // Alerts
-  alertWrapper: {
-    marginBottom: 16,
-  },
+  actionButtonText: { fontSize: 14, fontWeight: "600", color: Colors.neutral.textDark },
+  alertWrapper: { marginBottom: 16 },
   alertMealInfo: {
     backgroundColor: Colors.neutral.cardSurface,
     borderRadius: 12,
@@ -497,11 +521,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F0F0F0",
   },
-  alertMealHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 6,
-  },
+  alertMealHeader: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
   alertMealType: {
     fontSize: 14,
     fontWeight: "700",
@@ -509,11 +529,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
   },
-  alertMealItems: {
-    fontSize: 13,
-    color: Colors.neutral.mutedGray,
-    lineHeight: 18,
-  },
+  alertMealItems: { fontSize: 13, color: Colors.neutral.mutedGray, lineHeight: 18 },
   alertCountBadge: {
     backgroundColor: Colors.primary.orange,
     borderRadius: 12,
@@ -522,12 +538,7 @@ const styles = StyleSheet.create({
     minWidth: 24,
     alignItems: "center",
   },
-  alertCountText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  // Meals
+  alertCountText: { fontSize: 12, fontWeight: "700", color: "#FFFFFF" },
   mealCard: {
     backgroundColor: Colors.neutral.cardSurface,
     borderRadius: 16,
@@ -539,28 +550,11 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  mealHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  mealTypeContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  mealType: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
-  },
-  mealTime: {
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
-    fontWeight: "500",
-  },
-  mealItems: {
-  },
+  mealHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  mealTypeContainer: { flexDirection: "row", alignItems: "center" },
+  mealType: { fontSize: 16, fontWeight: "700", color: Colors.neutral.textDark },
+  mealTime: { fontSize: 14, color: Colors.neutral.mutedGray, fontWeight: "500" },
+  mealItems: {},
   mealItem: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -569,23 +563,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
-  mealItemName: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: Colors.neutral.textDark,
-    flex: 1,
-  },
-  mealItemKcal: {
-    fontSize: 13,
-    color: Colors.neutral.mutedGray,
-    fontWeight: "600",
-  },
-  // Symptoms
-  symptomsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginBottom: 12,
-  },
+  mealItemName: { fontSize: 15, fontWeight: "500", color: Colors.neutral.textDark, flex: 1 },
+  mealItemKcal: { fontSize: 13, color: Colors.neutral.mutedGray, fontWeight: "600" },
+  symptomsContainer: { flexDirection: "row", flexWrap: "wrap", marginBottom: 12 },
   symptomChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -596,26 +576,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E0E0E0",
   },
-  symptomName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
-    marginRight: 8,
-  },
-  severityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  severityMild: {
-    backgroundColor: `${Colors.primary.yellow}30`,
-  },
-  severityModerate: {
-    backgroundColor: `${Colors.primary.orange}30`,
-  },
-  severitySevere: {
-    backgroundColor: `${Colors.primary.orange}50`,
-  },
+  symptomName: { fontSize: 14, fontWeight: "600", color: Colors.neutral.textDark, marginRight: 8 },
+  severityBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  severityMild: { backgroundColor: `${Colors.primary.yellow}30` },
+  severityModerate: { backgroundColor: `${Colors.primary.orange}30` },
+  severitySevere: { backgroundColor: `${Colors.primary.orange}50` },
   severityText: {
     fontSize: 11,
     fontWeight: "700",
@@ -633,16 +598,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary.green,
     borderStyle: "dashed",
   },
-  addSymptomText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.primary.green,
-  },
-  removeSymptomButton: {
-    marginLeft: 8,
-    padding: 4,
-  },
-  // Empty States
+  addSymptomText: { fontSize: 14, fontWeight: "600", color: Colors.primary.green },
+  removeSymptomButton: { marginLeft: 8, padding: 4 },
   emptyCard: {
     backgroundColor: Colors.neutral.cardSurface,
     borderRadius: 16,
@@ -652,34 +609,11 @@ const styles = StyleSheet.create({
     borderColor: "#F0F0F0",
     borderStyle: "dashed",
   },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  emptySubtext: {
-    fontSize: 13,
-    color: Colors.neutral.mutedGray,
-  },
-  emptyButton: {
-    marginTop: 16,
-    backgroundColor: Colors.primary.green,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  emptyButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  // Stats
-  statsContainer: {
-    flexDirection: "row",
-    marginTop: 8,
-  },
+  emptyText: { fontSize: 16, fontWeight: "600", color: Colors.neutral.textDark, marginTop: 12, marginBottom: 4 },
+  emptySubtext: { fontSize: 13, color: Colors.neutral.mutedGray },
+  emptyButton: { marginTop: 16, backgroundColor: Colors.primary.green, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
+  emptyButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
+  statsContainer: { flexDirection: "row", marginTop: 8 },
   statCard: {
     flex: 1,
     backgroundColor: Colors.neutral.cardSurface,
@@ -693,12 +627,7 @@ const styles = StyleSheet.create({
     elevation: 3,
     marginHorizontal: 6,
   },
-  statValue: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: Colors.primary.green,
-    marginBottom: 4,
-  },
+  statValue: { fontSize: 32, fontWeight: "800", color: Colors.primary.green, marginBottom: 4 },
   statLabel: {
     fontSize: 12,
     fontWeight: "600",

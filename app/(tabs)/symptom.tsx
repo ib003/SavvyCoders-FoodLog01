@@ -1,6 +1,6 @@
-import { auth } from "@/app/lib/auth";
-import { symptoms } from "@/app/lib/symptoms";
 import { Colors } from "@/constants/Colors";
+import { auth } from "@/lib/auth";
+import { symptoms } from "@/lib/symptoms";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -16,7 +16,7 @@ export default function Symptom() {
   useEffect(() => {
     const checkAuth = async () => {
       const isAuth = await auth.isAuthenticated();
-      if (!isAuth) router.replace("/");
+      router.replace("/(auth)");
     };
     checkAuth();
   }, []);

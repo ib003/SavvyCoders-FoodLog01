@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from "react-native";
-import { useRouter } from "expo-router";
 import { Colors } from "@/constants/Colors";
+import { COMMON_ALLERGENS, COMMON_DIETARY_PREFERENCES, preferences, UserPreferences } from "@/lib/preferences";
 import { FontAwesome } from "@expo/vector-icons";
-import { preferences, COMMON_ALLERGENS, COMMON_DIETARY_PREFERENCES, UserPreferences } from "@/app/lib/preferences";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function AllergiesPreferences() {
   const router = useRouter();

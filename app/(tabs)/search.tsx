@@ -1,22 +1,22 @@
-import { API_BASE } from "@/app/constants/api";
-import { analyzeFood } from "@/app/lib/allergenChecker";
-import { auth } from "@/app/lib/auth";
 import AllergenWarning from "@/components/AllergenWarning";
+import { API_BASE } from "@/constants/api";
 import { Colors } from "@/constants/Colors";
+import { analyzeFood } from "@/lib/allergenChecker";
+import { auth } from "@/lib/auth";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 interface Food {
