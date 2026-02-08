@@ -40,7 +40,8 @@ export function TextField({
         Animated.timing(glowOpacityAnim, {
           toValue: 0.3,
           duration: 200,
-          useNativeDriver: true,
+          // shadowOpacity is not supported by native driver
+          useNativeDriver: false,
         }),
       ]).start();
     } else {
@@ -53,7 +54,8 @@ export function TextField({
         Animated.timing(glowOpacityAnim, {
           toValue: 0,
           duration: 200,
-          useNativeDriver: true,
+          // shadowOpacity is not supported by native driver
+          useNativeDriver: false,
         }),
       ]).start();
     }
