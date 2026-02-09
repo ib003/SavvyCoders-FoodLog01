@@ -1,6 +1,7 @@
 import { Colors } from "@/constants/Colors";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
+import { API_URL } from "@/lib/config";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -15,27 +16,85 @@ import {
 
 type MealType = "Breakfast" | "Lunch" | "Dinner" | "Snack";
 
+
+// Map UI meal types -> Prisma enum values
+function toPrismaMealType(t: MealType): "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK" {
+  switch (t) {
+    case "Breakfast":
+      return "BREAKFAST";
+    case "Lunch":
+      return "LUNCH";
+    case "Dinner":
+      return "DINNER";
+    case "Snack":
+      return "SNACK";
+  }
+}
+
+async function getToken(): Promise<string | null> {
+  // example if you store token in AsyncStorage:
+  // const token = await AsyncStorage.getItem("token");
+  // return token;
+
+  return null; // <-- replace me
+}
+
 export default function AddMeal() {
   const router = useRouter();
 
   const [mealType, setMealType] = useState<MealType>("Breakfast");
   const [title, setTitle] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
+  const [saving, setSaving] = useState(false);
 
-  const canContinue = useMemo(() => {
-    return title.trim().length > 0;
-  }, [title]);
+  const canContinue = useMemo(() => title.trim().length > 0, [title]);
 
-  const onContinue = () => {
+  const onContinue = async () => {
     if (!canContinue) {
       Alert.alert("Missing info", "Please enter a meal name (example: Chicken Salad).");
       return;
     }
+    if (!API_URL) {
+      Alert.alert("Config error", "EXPO_PUBLIC_API_URL is missing. Add it to your .env.");
+      return;
+    }
 
-    // If you later want to pass data across screens, you can save to localStorage/AsyncStorage.
-    Alert.alert("Saved (local)", `Meal: ${title.trim()}\nType: ${mealType}`, [
-      { text: "OK" },
-    ]);
+    try {
+      setSaving(true);
+
+      const token = await getToken();
+      if (!token) {
+        Alert.alert("Not logged in", "Please log in again.");
+        return;
+      }
+
+      const res = await fetch(`${API_URL}/api/meals`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          notes: notes.trim() || null,
+          mealType: toPrismaMealType(mealType),
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Failed to save meal");
+
+      // Clear form
+      setTitle("");
+      setNotes("");
+
+      // Go to Saved Meals (use YOUR actual route)
+      router.push("/add/saved"); // <-- change if your saved meals route differs
+    } catch (e: any) {
+      Alert.alert("Couldn’t save meal", e?.message ?? "Unknown error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -47,7 +106,6 @@ export default function AddMeal() {
         <Text style={styles.title}>Add Meal</Text>
         <Text style={styles.subtitle}>Pick how you want to add a meal.</Text>
 
-        {/* Meal basics */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Meal Details</Text>
 
@@ -60,6 +118,7 @@ export default function AddMeal() {
                   key={t}
                   onPress={() => setMealType(t)}
                   style={[styles.segment, active && styles.segmentActive]}
+                  disabled={saving}
                 >
                   <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
                     {t}
@@ -78,6 +137,7 @@ export default function AddMeal() {
             onChangeText={setTitle}
             autoCapitalize="words"
             returnKeyType="done"
+            editable={!saving}
           />
 
           <Text style={styles.label}>Notes (optional)</Text>
@@ -88,14 +148,17 @@ export default function AddMeal() {
             value={notes}
             onChangeText={setNotes}
             multiline
+            editable={!saving}
           />
 
           <Pressable
-            style={[styles.primaryBtn, !canContinue && styles.btnDisabled]}
+            style={[styles.primaryBtn, (!canContinue || saving) && styles.btnDisabled]}
             onPress={onContinue}
-            disabled={!canContinue}
+            disabled={!canContinue || saving}
           >
-            <Text style={styles.primaryBtnText}>Save Meal (local)</Text>
+            <Text style={styles.primaryBtnText}>
+              {saving ? "Saving..." : "Save Meal"}
+            </Text>
           </Pressable>
         </View>
 
@@ -204,5 +267,7 @@ const styles = StyleSheet.create({
   actionSub: { fontSize: 13, color: Colors.neutral.mutedGray },
 
   footerNote: { fontSize: 12, color: Colors.neutral.mutedGray, marginTop: 6 },
-  mono: { fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }) },
+  mono: {
+    fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }),
+  },
 });

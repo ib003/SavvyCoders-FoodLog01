@@ -2,7 +2,7 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
 
-type AuthedRequest = Request & { user?: any };
+type AuthedRequest = Request & { user?: JwtPayload };
 
 function getTokenFromHeader(req: Request): string | null {
   const auth = req.headers.authorization;
@@ -24,10 +24,11 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
 
     const decoded = jwt.verify(token, secret) as JwtPayload;
 
-    // We expect your token payload has: sub, email, name (based on your logs)
+    if (!decoded?.sub) return res.status(401).json({ error: "Invalid token payload" });
+
     req.user = decoded;
     return next();
-  } catch (err) {
+  } catch {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 }

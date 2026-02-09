@@ -14,7 +14,6 @@ export default function AuthLayout() {
     (async () => {
       const token = await auth.getToken();
 
-      // ✅ if token exists, skip login screens
       if (alive && token && token.length >= 10) {
         router.replace("/(tabs)/Dashboard");
         return;

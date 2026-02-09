@@ -5,13 +5,15 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import "react-native-reanimated";
+import { API_URL } from "@/lib/config";
+
+console.log("API_URL =", API_URL);
 
 import { useColorScheme } from "@/components/useColorScheme";
 
 export { ErrorBoundary } from "expo-router";
 
 export const unstable_settings = {
-  // ✅ Start at the auth group (where your login screen actually is)
   initialRouteName: "(auth)",
 };
 
@@ -42,13 +44,11 @@ function RootLayoutNav() {
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
-        {/* ✅ Auth routes live here: /(auth)/index and /(auth)/register */}
         <Stack.Screen name="(auth)" />
 
-        {/* ✅ Tabs group */}
+        {/*  Tabs group */}
         <Stack.Screen name="(tabs)" />
 
-        {/* ✅ Your Add stack group (app/add/_layout.tsx exists, so register "add") */}
         <Stack.Screen name="add" />
 
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
