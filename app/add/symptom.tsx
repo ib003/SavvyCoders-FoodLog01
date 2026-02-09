@@ -1,5 +1,5 @@
-import { auth } from "@/app/lib/auth";
-import { symptoms } from "@/app/lib/symptoms";
+import { auth } from "@/src/lib/auth";
+import { symptoms } from "@/src/lib/symptoms";
 import { Colors } from "@/constants/Colors";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";

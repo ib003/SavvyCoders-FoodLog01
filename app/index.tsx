@@ -1,10 +1,19 @@
-import { useState, useEffect } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
-import { useRouter } from "expo-router";
-import { Colors } from "@/constants/Colors";
-import { auth } from "@/app/lib/auth";
+import { Card } from "@/components/ui/Card";
+import { Divider } from "@/components/ui/Divider";
+import { GradientScreen } from "@/components/ui/GradientScreen";
+import { PrimaryButton } from "@/components/ui/PrimaryButton";
+import { SecondaryButton } from "@/components/ui/SecondaryButton";
+import { TextField } from "@/components/ui/TextField";
+import { Theme } from "@/constants/Theme";
+import { API_BASE } from "@/src/constants/api";
+import { auth } from "@/src/lib/auth";
+import { signInWithApple, signInWithGoogle } from "@/src/lib/oauth";
+import { useFadeIn, useScaleIn, useSlideInY } from "@/src/ui/animations";
 import { FontAwesome } from "@expo/vector-icons";
-import { API_BASE } from "@/app/constants/api";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import { Alert, Animated, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 export default function Login() {
   const router = useRouter();
@@ -13,37 +22,49 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // If already logged in, jump straight to tabs
+  // Animations
+  const heroOpacity = useFadeIn(500, 100);
+  const heroSlide = useSlideInY(30, 500, 100);
+  const formScale = useScaleIn(400, 300);
+  const button1Opacity = useFadeIn(300, 500);
+  const button2Opacity = useFadeIn(300, 600);
+  const button3Opacity = useFadeIn(300, 700);
+
+  // Single auth redirect guard: if token exists -> go to tabs, else stay on login
   useEffect(() => {
     let mounted = true;
+    let timeoutId: NodeJS.Timeout;
+    
     (async () => {
       try {
-        const isAuth = await auth.isAuthenticated();
-        if (mounted && isAuth) {
-          // Only auto-redirect if actually authenticated (has valid token)
-          const token = await auth.getToken();
-          if (token && typeof token === 'string' && token.length >= 10) {
-            setTimeout(() => {
+        await new Promise(resolve => setTimeout(resolve, 400));
+        if (!mounted) return;
+        
+        const token = await auth.getToken();
+        console.log("[Login] Auth guard check:", token ? `Token exists (length: ${token.length})` : "No token");
+        
+        if (mounted && token && typeof token === 'string' && token.length >= 20) {
+          console.log("[Login] Valid token found, redirecting to /(tabs)/Dashboard");
+          timeoutId = setTimeout(() => {
+            if (mounted) {
               router.replace("/(tabs)/Dashboard");
-            }, 100);
-          }
+            }
+          }, 100);
+        } else {
+          console.log("[Login] No valid token, staying on login screen (/)");
         }
       } catch (error) {
-        console.error("Auth check error:", error);
+        console.error("[Login] Auth guard error:", error);
       }
     })();
+    
     return () => {
       mounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
   }, []);
-
-  // Development mode: Allow skipping login to test other features
-  const DEV_MODE = true; // Set to false in production
-  
-  const handleSkipLogin = () => {
-    // Navigate to dashboard without authentication
-    router.replace("/(tabs)/Dashboard");
-  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
@@ -51,7 +72,6 @@ export default function Login() {
       return;
     }
 
-    // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
       Alert.alert("Invalid Email", "Please enter a valid email address.");
@@ -62,7 +82,6 @@ export default function Login() {
     try {
       const result = await auth.login(email.trim(), password);
       if (result.token) {
-        // Small delay to show success
         setTimeout(() => {
           router.replace("/(tabs)/Dashboard");
         }, 100);
@@ -94,262 +113,261 @@ export default function Login() {
   };
 
   const handleOAuth = async (provider: "google" | "apple") => {
-    Alert.alert("OAuth Coming Soon", `${provider === "google" ? "Google" : "Apple"} sign-in will be available soon.`);
-    // TODO: Implement OAuth when expo-auth-session is configured
+    setLoading(true);
+    try {
+      console.log(`[Login] Starting ${provider} OAuth...`);
+      
+      const result = provider === "google" 
+        ? await signInWithGoogle()
+        : await signInWithApple();
+      
+      console.log(`[Login] ${provider} OAuth result:`, result.success ? "Success" : "Failed", result.error || "");
+      
+      if (result.success && result.token) {
+        console.log(`[Login] ${provider} sign-in successful, navigating to dashboard...`);
+        setTimeout(() => {
+          router.replace("/(tabs)/Dashboard");
+        }, 100);
+      } else {
+        const errorMessage = result.error || `${provider === "google" ? "Google" : "Apple"} sign-in failed. Please try again.`;
+        console.error(`[Login] ${provider} OAuth failed:`, errorMessage);
+        Alert.alert(
+          "Sign In Failed",
+          errorMessage
+        );
+      }
+    } catch (error: any) {
+      console.error(`[Login] ${provider} OAuth unexpected error:`, error);
+      Alert.alert(
+        "Sign In Failed",
+        `Failed to sign in with ${provider === "google" ? "Google" : "Apple"}. ${error.message || "Please try again."}`
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSkipLoginDev = () => {
+    (auth as any).getToken = async () => "dev-demo-token-12345678901234567890";
+    (auth as any).isAuthenticated = async () => true;
+
+    router.replace("/(tabs)/Dashboard");
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+    <GradientScreen>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>SavvyTrack</Text>
-          <Text style={styles.subtitle}>Sign in to continue</Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Hero Header */}
+          <Animated.View
+            style={[
+              styles.heroSection,
+              {
+                opacity: heroOpacity,
+                transform: [
+                  { translateY: heroSlide.translateY },
+                ],
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={[Theme.colors.primary.gradient[0], Theme.colors.primary.gradient[1]]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.iconContainer}
+            >
+              <FontAwesome name="leaf" size={32} color="#FFFFFF" />
+            </LinearGradient>
+            <Text style={styles.heroTitle}>SavvyTrack</Text>
+            <Text style={styles.heroSubtitle}>Your personal food & health companion</Text>
+          </Animated.View>
 
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your email"
-              placeholderTextColor={Colors.neutral.mutedGray}
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-              editable={!loading}
-            />
-          </View>
+          {/* Form Card */}
+          <Animated.View
+            style={{
+              transform: [{ scale: formScale.scale }],
+              opacity: formScale.opacity,
+            }}
+          >
+            <Card style={styles.formCard} padding="2xl" variant="elevated">
+            <Text style={styles.formTitle}>Welcome Back</Text>
+            <Text style={styles.formSubtitle}>Sign in to continue your journey</Text>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.passwordContainer}>
-              <TextInput
-                style={styles.passwordInput}
+            <View style={styles.formFields}>
+              <TextField
+                label="Email"
+                placeholder="Enter your email"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                icon="envelope"
+                editable={!loading}
+              />
+
+              <TextField
+                label="Password"
                 placeholder="Enter your password"
-                placeholderTextColor={Colors.neutral.mutedGray}
+                value={password}
+                onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoComplete="password"
-                value={password}
-                onChangeText={setPassword}
+                icon="lock"
                 editable={!loading}
+                rightIcon={
+                  <Pressable onPress={() => setShowPassword(!showPassword)}>
+                    <FontAwesome
+                      name={showPassword ? "eye-slash" : "eye"}
+                      size={18}
+                      color={Theme.colors.text.tertiary}
+                    />
+                  </Pressable>
+                }
               />
-              <Pressable
-                style={styles.eyeIcon}
-                onPress={() => setShowPassword(!showPassword)}
-              >
-                <FontAwesome
-                  name={showPassword ? "eye-slash" : "eye"}
-                  size={20}
-                  color={Colors.neutral.mutedGray}
+
+              <Animated.View style={{ opacity: button1Opacity }}>
+                <PrimaryButton
+                  title="Sign In"
+                  onPress={handleLogin}
+                  loading={loading}
+                  disabled={loading}
+                  style={styles.signInButton}
                 />
+              </Animated.View>
+
+              <Divider text="OR" />
+
+              <Animated.View style={{ opacity: button2Opacity }}>
+                <SecondaryButton
+                  title="Continue with Google"
+                  onPress={() => handleOAuth("google")}
+                  disabled={loading}
+                  icon={<FontAwesome name="google" size={18} color={Theme.colors.text.primary} />}
+                  style={styles.oauthButton}
+                />
+              </Animated.View>
+
+              <Pressable
+                onPress={handleSkipLoginDev}
+                disabled={loading}
+                style={{ marginTop: Theme.spacing.md, alignItems: "center" }}
+              >
+                <Text
+                  style={{
+                    ...Theme.typography.captionSmall,
+                    color: Theme.colors.text.secondary,
+                    textDecorationLine: "underline",
+                  }}
+                >
+                  Skip login for demo
+                </Text>
               </Pressable>
+
+              {Platform.OS === "ios" && (
+                <Animated.View style={{ opacity: button3Opacity }}>
+                  <SecondaryButton
+                    title="Continue with Apple"
+                    onPress={() => handleOAuth("apple")}
+                    disabled={loading}
+                    icon={<FontAwesome name="apple" size={18} color={Theme.colors.text.primary} />}
+                    style={styles.oauthButton}
+                  />
+                </Animated.View>
+              )}
+
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>Don't have an account? </Text>
+                <Pressable onPress={() => router.push("/register")} disabled={loading}>
+                  <Text style={styles.footerLink}>Sign Up</Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
-
-          <Pressable
-            style={[styles.primaryButton, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Sign In</Text>
-            )}
-          </Pressable>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <Pressable
-            style={styles.oauthButton}
-            onPress={() => handleOAuth("google")}
-            disabled={loading}
-          >
-            <FontAwesome name="google" size={20} color={Colors.neutral.textDark} />
-            <Text style={styles.oauthButtonText}>Continue with Google</Text>
-          </Pressable>
-
-          {Platform.OS === "ios" && (
-            <Pressable
-              style={styles.oauthButton}
-              onPress={() => handleOAuth("apple")}
-              disabled={loading}
-            >
-              <FontAwesome name="apple" size={20} color={Colors.neutral.textDark} />
-              <Text style={styles.oauthButtonText}>Continue with Apple</Text>
-            </Pressable>
-          )}
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <Pressable onPress={() => router.push("/register")} disabled={loading}>
-              <Text style={styles.footerLink}>Sign Up</Text>
-            </Pressable>
-          </View>
-
-          {/* Development Mode: Skip Login Button */}
-          {DEV_MODE && (
-            <Pressable
-              style={styles.skipButton}
-              onPress={handleSkipLogin}
-              disabled={loading}
-            >
-              <Text style={styles.skipButtonText}>Skip Login (Dev Only)</Text>
-            </Pressable>
-          )}
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          </Card>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </GradientScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  keyboardView: {
     flex: 1,
-    backgroundColor: Colors.neutral.backgroundLight,
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: "center",
-    padding: 24,
+    paddingTop: Theme.spacing['4xl'],
+    paddingBottom: Theme.spacing['2xl'],
   },
-  header: {
-    alignItems: "center",
-    marginBottom: 40,
+  heroSection: {
+    alignItems: 'center',
+    marginBottom: Theme.spacing['3xl'],
   },
-  title: {
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: Theme.radius['2xl'],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Theme.spacing.lg,
+    ...Theme.shadows.button,
+  },
+  heroTitle: {
+    ...Theme.typography.title,
     fontSize: 36,
-    fontWeight: "800",
-    color: Colors.neutral.textDark,
-    marginBottom: 8,
+    color: Theme.colors.text.primary,
+    marginBottom: Theme.spacing.xs,
   },
-  subtitle: {
-    fontSize: 16,
-    color: Colors.neutral.mutedGray,
+  heroSubtitle: {
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.text.secondary,
+    textAlign: 'center',
+    paddingHorizontal: Theme.spacing.xl,
   },
-  form: {
-    gap: 20,
+  formCard: {
+    marginHorizontal: Theme.spacing.lg,
   },
-  inputContainer: {
-    gap: 8,
+  formTitle: {
+    ...Theme.typography.sectionTitle,
+    color: Theme.colors.text.primary,
+    marginBottom: Theme.spacing.xs,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
+  formSubtitle: {
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.text.secondary,
+    marginBottom: Theme.spacing['2xl'],
   },
-  input: {
-    backgroundColor: Colors.neutral.cardSurface,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: Colors.neutral.textDark,
+  formFields: {
+    gap: Theme.spacing.md,
   },
-  passwordContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.neutral.cardSurface,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 12,
-  },
-  passwordInput: {
-    flex: 1,
-    padding: 16,
-    fontSize: 16,
-    color: Colors.neutral.textDark,
-  },
-  eyeIcon: {
-    padding: 16,
-  },
-  primaryButton: {
-    backgroundColor: Colors.primary.green,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 8,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E0E0E0",
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
-    fontWeight: "500",
+  signInButton: {
+    marginTop: Theme.spacing.sm,
   },
   oauthButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.neutral.cardSurface,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-  },
-  oauthButtonText: {
-    color: Colors.neutral.textDark,
-    fontSize: 16,
-    fontWeight: "600",
+    marginTop: Theme.spacing.xs,
   },
   footer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: Theme.spacing.lg,
+    paddingTop: Theme.spacing.lg,
   },
   footerText: {
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.text.secondary,
   },
   footerLink: {
-    fontSize: 14,
-    color: Colors.primary.green,
-    fontWeight: "600",
-  },
-  skipButton: {
-    marginTop: 20,
-    padding: 12,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: Colors.primary.orange,
-    borderRadius: 12,
-    backgroundColor: Colors.neutral.backgroundLight,
-  },
-  skipButtonText: {
-    fontSize: 14,
-    color: Colors.primary.orange,
-    fontWeight: "600",
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.primary.main,
+    fontWeight: '600',
   },
 });

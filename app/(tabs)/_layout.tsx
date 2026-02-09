@@ -24,12 +24,7 @@ export default function TabLayout() {
       }}
       initialRouteName="Dashboard"
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          href: null, // Hide from tab bar
-        }}
-      />
+      {/* Removed index route - using Dashboard as initial route instead */}
 
       <Tabs.Screen
         name="Dashboard"
@@ -68,12 +63,6 @@ export default function TabLayout() {
         options={{
           href: null,
           headerShown: false,
-        }}
-      />
-      <Tabs.Screen
-        name="add"
-        options={{
-          href: null,
         }}
       />
       <Tabs.Screen

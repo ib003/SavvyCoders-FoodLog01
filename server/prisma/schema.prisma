@@ -44,7 +44,9 @@ enum VerificationTokenType {
 model User {
   id             String    @id @default(uuid())
   email          String    @unique
-  passwordHash   String
+  passwordHash   String?   // Optional for OAuth users
+  googleSub      String?   @unique // Google OAuth subject ID
+  appleSub       String?   @unique // Apple OAuth subject ID
   name           String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

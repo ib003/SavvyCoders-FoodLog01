@@ -3,64 +3,136 @@ const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+const { OAuth2Client } = require("google-auth-library");
+const jwksClient = require("jwks-rsa");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
+const OpenAI = require("openai");
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// Initialize Google OAuth client
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// Initialize Apple JWKS client for token verification
+const appleJwksClient = jwksClient({
+  jwksUri: "https://appleid.apple.com/auth/keys",
+  cache: true,
+  cacheMaxAge: 86400000, // 24 hours
+});
+
+// Helper function to get Apple signing key
+function getAppleKey(header, callback) {
+  appleJwksClient.getSigningKey(header.kid, (err, key) => {
+    if (err) {
+      return callback(err);
+    }
+    const signingKey = key.getPublicKey();
+    callback(null, signingKey);
+  });
+}
+
+// Helper function to verify Apple identity token
+async function verifyAppleToken(identityToken) {
+  return new Promise((resolve, reject) => {
+    jwt.verify(
+      identityToken,
+      getAppleKey,
+      {
+        algorithms: ["RS256"],
+        issuer: "https://appleid.apple.com",
+        audience: process.env.APPLE_CLIENT_ID || process.env.APPLE_BUNDLE_ID,
+      },
+      (err, decoded) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(decoded);
+        }
+      }
+    );
+  });
+}
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "20mb" }));
 
-// bearer auth
+// bearer auth middleware
 function auth(req, res, next) {
   const h = req.headers.authorization || "";
   const t = h.startsWith("Bearer ") ? h.slice(7) : "";
-  try { req.user = jwt.verify(t, process.env.JWT_SECRET); next(); }
-  catch { res.status(401).json({ error: "unauthorized" }); }
+  if (!t) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  try {
+    const decoded = jwt.verify(t, process.env.JWT_SECRET || "fallback-secret-key");
+    req.userId = decoded.userId; // Use userId consistently
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
 }
 
 // --- Auth ---
 app.post("/auth/register", async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log("[REGISTER] Attempt for email:", email ? email.trim().toLowerCase() : "missing");
     
     if (!email || !password) {
+      console.log("[REGISTER] Missing email or password");
       return res.status(400).json({ error: "Email and password are required" });
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!emailRegex.test(normalizedEmail)) {
+      console.log("[REGISTER] Invalid email format:", normalizedEmail);
       return res.status(400).json({ error: "Invalid email format" });
     }
 
     // Validate password length
-    if (password.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters long" });
+    if (password.length < 8) {
+      console.log("[REGISTER] Password too short:", password.length);
+      return res.status(400).json({ error: "Password must be at least 8 characters long" });
     }
 
-    const hash = await bcrypt.hash(password, 10);
+    console.log("[REGISTER] Hashing password...");
+    const passwordHash = await bcrypt.hash(password, 12);
+    console.log("[REGISTER] Password hashed, length:", passwordHash.length);
     
     try {
+      console.log("[REGISTER] Creating user in database...");
       const user = await prisma.user.create({ 
         data: { 
-          email: email.trim().toLowerCase(), 
-          password: hash,
-          allergies: [],
-          dietaryPreferences: []
-        } 
+          email: normalizedEmail, 
+          passwordHash: passwordHash,
+          googleSub: null,
+          appleSub: null,
+        },
+        select: {
+          id: true,
+          email: true,
+          createdAt: true
+        }
       });
-      const token = jwt.sign({ uid: user.id, email: user.email }, process.env.JWT_SECRET || "fallback-secret-key", { expiresIn: "7d" });
-      res.json({ token, email: user.email });
+      console.log("[REGISTER] User created successfully:", { id: user.id, email: user.email });
+      
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET || "fallback-secret-key", { expiresIn: "7d" });
+      console.log("[REGISTER] JWT token generated");
+      res.json({ token, user: { id: user.id, email: user.email } });
     } catch (prismaError) {
       // Handle unique constraint violation (email already exists)
       if (prismaError.code === "P2002" && prismaError.meta?.target?.includes("email")) {
+        console.log("[REGISTER] Email already exists:", normalizedEmail);
         return res.status(400).json({ error: "An account with this email already exists" });
       }
-      console.error("Prisma error:", prismaError);
+      console.error("[REGISTER] Prisma error:", prismaError);
       return res.status(500).json({ error: "Failed to create account. Please try again." });
     }
   } catch (error) {
-    console.error("Registration error:", error);
+    console.error("[REGISTER] Unexpected error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -68,35 +140,269 @@ app.post("/auth/register", async (req, res) => {
 app.post("/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = email ? email.trim().toLowerCase() : null;
+    console.log("[LOGIN] Attempt for email:", normalizedEmail || "missing");
     
     if (!email || !password) {
+      console.log("[LOGIN] Missing email or password");
       return res.status(400).json({ error: "Email and password are required" });
     }
 
-    const u = await prisma.user.findUnique({ 
-      where: { email: email.trim().toLowerCase() } 
+    console.log("[LOGIN] Looking up user in database...");
+    const user = await prisma.user.findUnique({ 
+      where: { email: normalizedEmail },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true
+      }
     });
     
-    if (!u) {
-      return res.status(400).json({ error: "Invalid email or password" });
+    if (!user) {
+      console.log("[LOGIN] User not found for email:", normalizedEmail);
+      return res.status(401).json({ error: "Invalid email or password" });
     }
     
-    const ok = await bcrypt.compare(password, u.password);
+    console.log("[LOGIN] User found:", { id: user.id, email: user.email });
+    console.log("[LOGIN] Comparing password...");
+    const passwordValid = await bcrypt.compare(password, user.passwordHash);
+    console.log("[LOGIN] Password match:", passwordValid);
     
-    if (!ok) {
-      return res.status(400).json({ error: "Invalid email or password" });
+    if (!passwordValid) {
+      console.log("[LOGIN] Password mismatch for user:", user.email);
+      return res.status(401).json({ error: "Invalid email or password" });
     }
     
+    console.log("[LOGIN] Generating JWT token...");
     const token = jwt.sign(
-      { uid: u.id, email: u.email }, 
+      { userId: user.id }, 
       process.env.JWT_SECRET || "fallback-secret-key", 
       { expiresIn: "7d" }
     );
+    console.log("[LOGIN] Login successful for user:", user.email);
     
-    res.json({ token, email: u.email });
+    res.json({ 
+      token, 
+      user: { id: user.id, email: user.email } 
+    });
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("[LOGIN] Unexpected error:", error);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// --- OAuth Endpoints ---
+app.post("/auth/google", async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    
+    if (!idToken) {
+      return res.status(400).json({ error: "idToken is required" });
+    }
+
+    console.log("[GOOGLE OAUTH] Verifying Google idToken...");
+    
+    // Verify the Google idToken
+    const ticket = await googleClient.verifyIdToken({
+      idToken: idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    
+    const payload = ticket.getPayload();
+    if (!payload) {
+      return res.status(401).json({ error: "Invalid Google token" });
+    }
+
+    const { sub: googleSub, email, name, picture } = payload;
+    console.log("[GOOGLE OAUTH] Token verified for:", email);
+
+    if (!email) {
+      return res.status(400).json({ error: "Email not provided by Google" });
+    }
+
+    // Upsert user in database - check by googleSub first, then email
+    let user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { googleSub: googleSub },
+          { email: email.toLowerCase() }
+        ]
+      },
+    });
+
+    if (user) {
+      // Update existing user
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          email: email.toLowerCase(),
+          googleSub: googleSub,
+          name: name || undefined,
+          updatedAt: new Date(),
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      });
+    } else {
+      // Create new user
+      user = await prisma.user.create({
+        data: {
+          email: email.toLowerCase(),
+          googleSub: googleSub,
+          name: name || undefined,
+          passwordHash: null,
+          appleSub: null,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      });
+    }
+
+    console.log("[GOOGLE OAUTH] User upserted:", user.email);
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user.id },
+      process.env.JWT_SECRET || "fallback-secret-key",
+      { expiresIn: "7d" }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      },
+    });
+  } catch (error) {
+    console.error("[GOOGLE OAUTH] Error:", error);
+    console.error("[GOOGLE OAUTH] Error message:", error.message);
+    console.error("[GOOGLE OAUTH] Error stack:", error.stack);
+    if (error.message?.includes("Invalid token") || error.message?.includes("Token used too early")) {
+      return res.status(401).json({ error: "Invalid Google token: " + error.message });
+    }
+    res.status(500).json({ error: "OAuth authentication failed: " + error.message });
+  }
+});
+
+app.post("/auth/apple", async (req, res) => {
+  try {
+    const { identityToken, authorizationCode, user } = req.body;
+    
+    if (!identityToken) {
+      return res.status(400).json({ error: "identityToken is required" });
+    }
+
+    console.log("[APPLE OAUTH] Verifying Apple identityToken...");
+
+    // Verify Apple identity token using JWKS
+    let applePayload;
+    try {
+      applePayload = await verifyAppleToken(identityToken);
+      console.log("[APPLE OAUTH] Token verified successfully");
+    } catch (error) {
+      console.error("[APPLE OAUTH] Token verification error:", error);
+      console.error("[APPLE OAUTH] Error details:", error.message);
+      return res.status(401).json({ error: "Invalid Apple token: " + error.message });
+    }
+
+    const { sub: appleSub, email } = applePayload;
+    console.log("[APPLE OAUTH] Token verified for:", email || "no email", "sub:", appleSub);
+
+    // Apple may not provide email in subsequent logins
+    // Use the email from the user object if provided, or from token
+    const userEmail = user?.email || email;
+    if (!userEmail && !appleSub) {
+      return res.status(400).json({ error: "Email or Apple ID not provided" });
+    }
+
+    // Upsert user in database - check by appleSub first, then email
+    const whereConditions = [];
+    if (appleSub) {
+      whereConditions.push({ appleSub: appleSub });
+    }
+    if (userEmail) {
+      whereConditions.push({ email: userEmail.toLowerCase() });
+    }
+    
+    let dbUser = whereConditions.length > 0 
+      ? await prisma.user.findFirst({
+          where: {
+            OR: whereConditions,
+          },
+        })
+      : null;
+
+    if (dbUser) {
+      // Update existing user
+      dbUser = await prisma.user.update({
+        where: { id: dbUser.id },
+        data: {
+          ...(userEmail && { email: userEmail.toLowerCase() }),
+          appleSub: appleSub,
+          name: user?.fullName?.givenName || user?.fullName?.familyName 
+            ? `${user.fullName.givenName || ''} ${user.fullName.familyName || ''}`.trim()
+            : undefined,
+          updatedAt: new Date(),
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      });
+    } else {
+      // Create new user
+      dbUser = await prisma.user.create({
+        data: {
+          email: userEmail ? userEmail.toLowerCase() : `apple_${appleSub}@apple.local`,
+          appleSub: appleSub,
+          name: user?.fullName?.givenName || user?.fullName?.familyName 
+            ? `${user.fullName.givenName || ''} ${user.fullName.familyName || ''}`.trim()
+            : undefined,
+          passwordHash: null,
+          googleSub: null,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      });
+    }
+
+    console.log("[APPLE OAUTH] User upserted:", dbUser.email);
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: dbUser.id },
+      process.env.JWT_SECRET || "fallback-secret-key",
+      { expiresIn: "7d" }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: dbUser.id,
+        email: dbUser.email,
+        name: dbUser.name,
+      },
+    });
+  } catch (error) {
+    console.error("[APPLE OAUTH] Error:", error);
+    console.error("[APPLE OAUTH] Error message:", error.message);
+    console.error("[APPLE OAUTH] Error stack:", error.stack);
+    if (error.message?.includes("Invalid token") || error.message?.includes("jwt expired")) {
+      return res.status(401).json({ error: "Invalid Apple token: " + error.message });
+    }
+    res.status(500).json({ error: "OAuth authentication failed: " + error.message });
   }
 });
 
@@ -182,13 +488,37 @@ app.post("/barcode/decode", async (req, res) => {
 });
 
 // --- Meals ---
+// --- Auth Me Endpoint ---
+app.get("/auth/me", auth, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        createdAt: true
+      }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    
+    res.json(user);
+  } catch (error) {
+    console.error("Auth me error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.post("/meals", auth, async (req, res) => {
   const { occurred_at, meal_type, items } = req.body;
   if (!occurred_at || !meal_type || !Array.isArray(items)) {
     return res.status(400).json({ error: "invalid body" });
   }
   const meal = await prisma.meal.create({
-    data: { userId: req.user.uid, occurredAt: new Date(occurred_at), mealType: meal_type },
+    data: { userId: req.userId, occurredAt: new Date(occurred_at), mealType: meal_type },
   });
   if (items.length) {
     await prisma.mealItem.createMany({
@@ -205,35 +535,245 @@ app.get("/meals", auth, async (req, res) => {
   const start = date ? new Date(`${date}T00:00:00Z`) : new Date("1970-01-01T00:00:00Z");
   const end   = date ? new Date(`${date}T23:59:59Z`) : new Date("2999-12-31T23:59:59Z");
   const meals = await prisma.meal.findMany({
-    where: { userId: req.user.uid, occurredAt: { gte: start, lte: end } },
+    where: { userId: req.userId, occurredAt: { gte: start, lte: end } },
     include: { items: { include: { food: true } } },
     orderBy: { occurredAt: "desc" }
   });
   res.json(meals);
 });
 
+// --- AI Food Analysis ---
+// --- AI Food Analysis ---
+app.post("/api/analyze-food", async (req, res) =>
+{
+const image = req.body.image
+
+if (!image)
+{
+return res.status(400).json({ error: "missing image" })
+}
+
+let dataUrl = image
+if (!dataUrl.startsWith("data:"))
+{
+dataUrl = "data:image/jpeg;base64," + dataUrl
+}
+
+//this object will hold the final ai estimate for the food in the picture
+let result =
+{
+name: "unknown food",
+calories: 0,
+protein: 0,
+carbs: 0,
+fat: 0,
+ingredients: []
+}
+
+try
+{
+//this is the prompt i give ChatGPT to get the estimate  
+const promptText = "you see a photo of food. estimate the dish name, total calories, grams of protein, grams of carbs, grams of fat, and a short list of ingredients. respond only with json using keys name, calories, protein, carbs, fat, ingredients where ingredients is an array of strings"
+
+const aiRes = await openai.responses.create({
+model: "gpt-4.1-mini",
+input: [
+{
+role: "user",
+content: [
+{ type: "input_text", text: promptText },
+{ type: "input_image", image_url: dataUrl }
+]
+}
+]
+})
+
+let aiText = null
+
+//this if statement checks if the output i got from ChatGPT is in the right format/is usable
+if (aiRes && aiRes.output && aiRes.output[0] && aiRes.output[0].content && aiRes.output[0].content[0] && aiRes.output[0].content[0].text)
+{
+aiText = aiRes.output[0].content[0].text
+}
+
+//if aitext is not null, that means the previous check was fine
+if (aiText)
+{
+try
+{
+const parsed = JSON.parse(aiText)
+result.name = parsed.name || result.name
+result.calories = parsed.calories || result.calories
+result.protein = parsed.protein || result.protein
+result.carbs = parsed.carbs || result.carbs
+result.fat = parsed.fat || result.fat
+result.ingredients = parsed.ingredients || result.ingredients
+}
+catch (e)
+{
+console.error("json parse error", e)
+}
+}
+}
+catch (err)
+{
+console.error("ai error", err)
+}
+//stuff above is just broad error catching
+if (!result || !result.name)
+{
+return res.status(500).json({ error: "ai failed to analyze image" })
+}
+
+//this function normalizes what the ai gave us to usable food object
+function normalizeFood(result)
+{
+  if (!result)
+  {
+  return null
+  }
+  
+  if (typeof result !== "object")
+{
+return null
+}
+
+let calories = Number(result.calories)
+//all of these if statements below just make sure the avlues they get are positive, usable numbers
+if (isNaN(calories) || calories < 0)
+{
+calories = 0
+}
+
+let protein = Number(result.protein)
+if (isNaN(protein) || protein < 0)
+{
+protein = 0
+}
+
+let carbs = Number(result.carbs)
+if (isNaN(carbs) || carbs < 0)
+{
+carbs = 0
+}
+
+let fat = Number(result.fat)
+if (isNaN(fat) || fat < 0)
+{
+fat = 0
+}
+
+let ingredients = []
+if (Array.isArray(result.ingredients))
+{
+ingredients = result.ingredients.map((item) =>
+{
+if (typeof item === "string")
+{
+return item
+}
+return String(item)
+})
+}
+
+//we aren't using result.value for these values anymore because they all got tested and if need be, cleaned in the if statements above
+return {
+name: result.name || "unknown",
+calories: calories,
+protein: protein,
+carbs: carbs,
+fat: fat,
+ingredients: ingredients
+}
+}
+
+//replacing saveFood with a dummy function because the Postgre server didn't get set up, and I can't be bothered to do that today
+async function saveFood(food)
+{
+return null
+}
+
+//this function saves the normalized food to the database so we can reuse it later
+/*async function saveFood(food)
+{
+if (!food || !food.name)
+{
+return null
+}
+
+let saved = null
+
+try
+{
+saved = await prisma.food.create({
+data:
+{
+name: food.name,
+calories: food.calories
+}
+})
+}
+catch (e)
+{
+console.error("db error", e)
+return null
+}
+
+return saved
+}*/
+
+//in case normalizeFood returns NULL, we return an error message
+const clean = normalizeFood(result)
+
+if (!clean)
+{
+return res.status(500).json({ error: "ai result invalid" })
+}
+
+const saved = await saveFood(clean)
+
+res.json(saved || clean)
+})
+
 // --- User Preferences ---
 app.get("/user/preferences", auth, async (req, res) => {
-  const user = await prisma.user.findUnique({
-    where: { id: req.user.uid },
-    select: { allergies: true, dietaryPreferences: true },
-  });
-  if (!user) return res.status(404).json({ error: "user not found" });
-  res.json({ allergies: user.allergies || [], dietaryPreferences: user.dietaryPreferences || [] });
+  try {
+    // Get user allergies from UserAllergy relation
+    const userAllergies = await prisma.userAllergy.findMany({
+      where: { userId: req.userId },
+      include: { allergy: true }
+    });
+    
+    // For now, return empty arrays - preferences are stored differently in this schema
+    // You may need to adjust this based on your actual preference storage
+    res.json({ 
+      allergies: userAllergies.map(ua => ua.allergy.name) || [], 
+      dietaryPreferences: [] 
+    });
+  } catch (error) {
+    console.error("Get preferences error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 app.put("/user/preferences", auth, async (req, res) => {
-  const { allergies, dietaryPreferences } = req.body;
-  if (!Array.isArray(allergies) || !Array.isArray(dietaryPreferences)) {
-    return res.status(400).json({ error: "allergies and dietaryPreferences must be arrays" });
+  try {
+    const { allergies, dietaryPreferences } = req.body;
+    if (!Array.isArray(allergies)) {
+      return res.status(400).json({ error: "allergies must be an array" });
+    }
+    
+    // Note: This is a simplified version. You may need to map allergies to Allergy IDs
+    // For now, just return what was sent
+    res.json({ allergies, dietaryPreferences: dietaryPreferences || [] });
+  } catch (error) {
+    console.error("Update preferences error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
-  const user = await prisma.user.update({
-    where: { id: req.user.uid },
-    data: { allergies, dietaryPreferences },
-    select: { allergies: true, dietaryPreferences: true },
-  });
-  res.json(user);
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`API running on :${PORT}`));
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`API running on http://0.0.0.0:${PORT}`);
+  console.log(`Server accessible from network devices`);
+});
