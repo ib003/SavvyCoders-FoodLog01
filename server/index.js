@@ -163,6 +163,11 @@ app.post("/auth/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password" });
     }
     
+    if (!user.passwordHash) {
+      console.log("[LOGIN] User has no passwordHash (OAuth account):", user.email);
+      return res.status(401).json({ error: "Please sign in with Google/Apple for this account" });
+    }
+    
     console.log("[LOGIN] User found:", { id: user.id, email: user.email });
     console.log("[LOGIN] Comparing password...");
     const passwordValid = await bcrypt.compare(password, user.passwordHash);
@@ -513,17 +518,28 @@ app.get("/auth/me", auth, async (req, res) => {
 });
 
 app.post("/meals", auth, async (req, res) => {
-  const { occurred_at, meal_type, items } = req.body;
+  const { occurred_at, meal_type, note, items } = req.body;
   if (!occurred_at || !meal_type || !Array.isArray(items)) {
     return res.status(400).json({ error: "invalid body" });
   }
   const meal = await prisma.meal.create({
-    data: { userId: req.userId, occurredAt: new Date(occurred_at), mealType: meal_type },
+    data: { userId: req.userId, dateTime: new Date(occurred_at), mealType: meal_type, note: note || null },
   });
   if (items.length) {
     await prisma.mealItem.createMany({
       data: items.map(it => ({
-        mealId: meal.id, foodId: it.food_id, qty: it.qty, overrides: it.overrides || {}
+        mealId: meal.id,
+        foodId: it.food_id,
+        quantity: it.qty ?? it.quantity ?? 1,
+        unit: it.unit ?? null,
+        notes: it.notes ?? null,
+        calories: it.calories ?? null,
+        protein: it.protein ?? null,
+        carbs: it.carbs ?? null,
+        fat: it.fat ?? null,
+        fiber: it.fiber ?? null,
+        sugar: it.sugar ?? null,
+        sodium: it.sodium ?? null
       }))
     });
   }
@@ -532,12 +548,12 @@ app.post("/meals", auth, async (req, res) => {
 
 app.get("/meals", auth, async (req, res) => {
   const { date } = req.query; // YYYY-MM-DD
-  const start = date ? new Date(`${date}T00:00:00Z`) : new Date("1970-01-01T00:00:00Z");
-  const end   = date ? new Date(`${date}T23:59:59Z`) : new Date("2999-12-31T23:59:59Z");
+  const start = date ? new Date(`${date}T00:00:00.000Z`) : new Date("1970-01-01T00:00:00.000Z");
+  const end   = date ? new Date(`${date}T23:59:59.999Z`) : new Date("2999-12-31T23:59:59.999Z");
   const meals = await prisma.meal.findMany({
-    where: { userId: req.userId, occurredAt: { gte: start, lte: end } },
+    where: { userId: req.userId, dateTime: { gte: start, lte: end } },
     include: { items: { include: { food: true } } },
-    orderBy: { occurredAt: "desc" }
+    orderBy: { dateTime: "desc" }
   });
   res.json(meals);
 });
@@ -690,7 +706,32 @@ ingredients: ingredients
 //replacing saveFood with a dummy function because the Postgre server didn't get set up, and I can't be bothered to do that today
 async function saveFood(food)
 {
+if (!food || !food.name)
+{
 return null
+}
+
+let saved = null
+
+try
+{
+saved = await prisma.food.create({
+data:
+{
+name: food.name,
+calories: food.calories,
+description: Array.isArray(food.ingredients) && food.ingredients.length ? "Ingredients: " + food.ingredients.join(", ") : null,
+source: "PHOTO_API"
+}
+})
+}
+catch (e)
+{
+console.error("db error", e)
+return null
+}
+
+return saved
 }
 
 //this function saves the normalized food to the database so we can reuse it later
@@ -765,7 +806,35 @@ app.put("/user/preferences", auth, async (req, res) => {
     
     // Note: This is a simplified version. You may need to map allergies to Allergy IDs
     // For now, just return what was sent
-    res.json({ allergies, dietaryPreferences: dietaryPreferences || [] });
+    const cleanAllergies = allergies.map(a => String(a).trim()).filter(a => a.length > 0);
+    
+    const allergyIds = [];
+    for (const name of cleanAllergies) {
+      let allergy = await prisma.allergy.findFirst({
+        where: { name: name }
+      });
+      if (!allergy) {
+        allergy = await prisma.allergy.create({
+          data: { name: name }
+        });
+      }
+      allergyIds.push(allergy.id);
+    }
+    
+    await prisma.userAllergy.deleteMany({
+      where: { userId: req.userId }
+    });
+    
+    if (allergyIds.length) {
+      await prisma.userAllergy.createMany({
+        data: allergyIds.map((id) => ({
+          userId: req.userId,
+          allergyId: id
+        }))
+      });
+    }
+    
+    res.json({ allergies: cleanAllergies, dietaryPreferences: dietaryPreferences || [] });
   } catch (error) {
     console.error("Update preferences error:", error);
     res.status(500).json({ error: "Internal server error" });
