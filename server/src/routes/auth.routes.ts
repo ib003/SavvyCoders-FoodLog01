@@ -1,12 +1,11 @@
-// server/src/routes/auth.routes.ts
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import crypto from "crypto";
-
-import { getUserByEmail, saveUser } from "../authStorage";
+import type { SignOptions } from "jsonwebtoken";
+import { PrismaClient } from "@prisma/client";
 
 const router = Router();
+const prisma = new PrismaClient();
 
 function requireEnv(name: string): string {
   const v = process.env[name];
@@ -15,6 +14,27 @@ function requireEnv(name: string): string {
 }
 
 const JWT_SECRET = requireEnv("JWT_SECRET");
+
+// ✅ Makes TS happy (and supports "7d" or "3600")
+function getExpiresIn(): SignOptions["expiresIn"] {
+  const raw = (process.env.JWT_EXPIRES_IN ?? "7d").trim();
+
+  // if someone sets JWT_EXPIRES_IN=3600
+  if (/^\d+$/.test(raw)) return Number(raw);
+
+  // otherwise "7d", "1h", "30m", etc.
+  return raw as SignOptions["expiresIn"];
+}
+
+function signToken(user: { id: string; email: string; name?: string | null }) {
+  const options: SignOptions = { expiresIn: getExpiresIn() };
+
+  return jwt.sign(
+    { sub: user.id, email: user.email, name: user.name ?? undefined },
+    JWT_SECRET,
+    options
+  );
+}
 
 router.post("/register", async (req, res) => {
   try {
@@ -25,43 +45,31 @@ router.post("/register", async (req, res) => {
     };
 
     if (!email || !password || !name) {
-      return res.status(400).json({ error: "email, password, name are required" });
+      return res.status(400).json({ error: "email, password, and name are required" });
     }
 
-    const existing = getUserByEmail(email);
-    if (existing) {
-      return res.status(409).json({ error: "email already registered" });
-    }
-
-    // simple password rule (you can tighten later)
     if (password.length < 8) {
       return res.status(400).json({ error: "password must be at least 8 characters" });
     }
 
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return res.status(409).json({ error: "email already registered" });
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const user = {
-      id: crypto.randomUUID(),
-      email,
-      name,
-      passwordHash,
-      createdAt: new Date().toISOString(),
-    };
-
-    saveUser(user);
-
-    const token = jwt.sign(
-      { sub: user.id, email: user.email, name: user.name },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    return res.json({
-      token,
-      user: { id: user.id, email: user.email, name: user.name },
+    const user = await prisma.user.create({
+      data: { email, name, passwordHash },
+      select: { id: true, email: true, name: true },
     });
+
+    const token = signToken(user);
+
+    return res.json({ token, user });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message ?? "server error" });
+    console.error("REGISTER ERROR:", e);
+    return res.status(500).json({ error: "Failed to register user" });
   }
 });
 
@@ -73,8 +81,12 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "email and password are required" });
     }
 
-    const user = getUserByEmail(email);
-    if (!user) {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, name: true, passwordHash: true },
+    });
+
+    if (!user || !user.passwordHash) {
       return res.status(401).json({ error: "invalid credentials" });
     }
 
@@ -83,18 +95,15 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "invalid credentials" });
     }
 
-    const token = jwt.sign(
-      { sub: user.id, email: user.email, name: user.name },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = signToken(user);
 
     return res.json({
       token,
       user: { id: user.id, email: user.email, name: user.name },
     });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message ?? "server error" });
+    console.error("LOGIN ERROR:", e);
+    return res.status(500).json({ error: "Failed to login" });
   }
 });
 

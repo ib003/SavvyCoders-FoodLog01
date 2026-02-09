@@ -1,8 +1,8 @@
+// lib/auth.ts
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE } from "../constants/api";
 
-// ---------- helpers ----------
-const fetchWithTimeout = async (
+const fetchWithTimeout = (
   url: string,
   options: RequestInit,
   timeout = 4000
@@ -15,64 +15,60 @@ const fetchWithTimeout = async (
   ]);
 };
 
-// ---------- storage keys ----------
 const TOKEN_KEY = "auth_token";
 const USER_EMAIL_KEY = "user_email";
 
-// ---------- types ----------
 export interface AuthResponse {
   token: string;
   email?: string;
+  user?: { id: string; email: string; name?: string | null }; // optional if backend returns user
 }
 
-// ---------- auth ----------
 export const auth = {
   async checkServerConnection(): Promise<boolean> {
     try {
-      const res = await Promise.race([
-        fetch(`${API_BASE}/health`),
-        new Promise<Response>((_, reject) =>
-          setTimeout(() => reject(new Error("timeout")), 2000)
-        ),
-      ]);
+      const res = await fetchWithTimeout(`${API_BASE}/health`, { method: "GET" }, 2000);
       return res.ok;
     } catch {
       return false;
     }
   },
 
+  async saveToken(token: string): Promise<void> {
+    await AsyncStorage.setItem(TOKEN_KEY, token);
+  },
+
+  async saveUserEmail(email: string): Promise<void> {
+    await AsyncStorage.setItem(USER_EMAIL_KEY, email);
+  },
+
   async login(email: string, password: string): Promise<AuthResponse> {
     const cleanEmail = email.trim();
 
-    if (!cleanEmail || !password) {
-      throw new Error("Email and password are required");
-    }
+    if (!cleanEmail || !password) throw new Error("Email and password are required");
 
     const serverOk = await this.checkServerConnection();
-    if (!serverOk) {
-      throw new Error("Cannot connect to server");
-    }
+    if (!serverOk) throw new Error("Cannot connect to server");
 
-    const res = await fetchWithTimeout(`${API_BASE}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: cleanEmail, password }),
-    });
+    const res = await fetchWithTimeout(
+      `${API_BASE}/auth/login`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail, password }),
+      },
+      4000
+    );
 
     const data = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      throw new Error(data?.error || data?.message || "Login failed");
-    }
+    if (!res.ok) throw new Error(data?.error || data?.message || "Login failed");
+    if (!data?.token) throw new Error("No token returned");
 
-    if (!data.token) {
-      throw new Error("No token returned");
-    }
+    await this.saveToken(data.token);
+    await this.saveUserEmail(cleanEmail);
 
-    await AsyncStorage.setItem(TOKEN_KEY, data.token);
-    await AsyncStorage.setItem(USER_EMAIL_KEY, cleanEmail);
-
-    return { token: data.token, email: cleanEmail };
+    return { token: data.token, email: cleanEmail, user: data.user };
   },
 
   async register(email: string, password: string, name: string): Promise<AuthResponse> {
@@ -84,30 +80,27 @@ export const auth = {
     }
 
     const serverOk = await this.checkServerConnection();
-    if (!serverOk) {
-      throw new Error("Cannot connect to server");
-    }
+    if (!serverOk) throw new Error("Cannot connect to server");
 
-    const res = await fetchWithTimeout(`${API_BASE}/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: cleanEmail, password, name: cleanName }),
-    });
+    const res = await fetchWithTimeout(
+      `${API_BASE}/auth/register`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail, password, name: cleanName }),
+      },
+      4000
+    );
 
     const data = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      throw new Error(data?.error || data?.message || "Unable to create account");
-    }
+    if (!res.ok) throw new Error(data?.error || data?.message || "Unable to create account");
+    if (!data?.token) throw new Error("No token returned");
 
-    if (!data.token) {
-      throw new Error("No token returned");
-    }
+    await this.saveToken(data.token);
+    await this.saveUserEmail(cleanEmail);
 
-    await AsyncStorage.setItem(TOKEN_KEY, data.token);
-    await AsyncStorage.setItem(USER_EMAIL_KEY, cleanEmail);
-
-    return { token: data.token, email: cleanEmail };
+    return { token: data.token, email: cleanEmail, user: data.user };
   },
 
   async getToken(): Promise<string | null> {
@@ -118,10 +111,10 @@ export const auth = {
     return AsyncStorage.getItem(USER_EMAIL_KEY);
   },
 
-  async isAuthenticated() {
-  const token = await this.getToken();
-  return !!token && token.length >= 10;
-},
+  async isAuthenticated(): Promise<boolean> {
+    const token = await this.getToken();
+    return !!token && token.length >= 10;
+  },
 
   async logout(): Promise<void> {
     await AsyncStorage.multiRemove([TOKEN_KEY, USER_EMAIL_KEY]);

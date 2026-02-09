@@ -7,16 +7,16 @@ import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 interface Food {
@@ -47,18 +47,50 @@ export default function AddSearch() {
   const [allergenAnalysis, setAllergenAnalysis] = useState<any>(null);
 
   const searchFoods = useCallback(async (query: string) => {
-    if (!query.trim()) {
+    const q = query.trim();
+    if (!q) {
       setFoods([]);
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/foods?q=${encodeURIComponent(query)}`);
-      if (response.ok) {
-        const data = await response.json();
-        setFoods(data);
+      // ✅ use /api/foods (because server.ts mounts app.use("/api", apiRoutes))
+      const token = await auth.getToken();
+
+      const response = await fetch(
+        `${API_BASE}/api/foods?q=${encodeURIComponent(q)}`,
+        {
+          headers: {
+            Accept: "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        console.error("Foods search failed:", response.status, data);
+        Alert.alert("Error", data?.error || data?.message || "Search failed.");
+        setFoods([]);
+        return;
       }
+
+      // ✅ support either: [ ... ] OR { foods: [...] }
+      const list = Array.isArray(data) ? data : Array.isArray(data?.foods) ? data.foods : [];
+
+      const normalized: Food[] = list.map((item: any) => ({
+        id: String(item.id ?? item.food_id ?? item.code ?? Math.random()),
+        name: String(item.name ?? item.food_name ?? item.product_name ?? "Unknown food"),
+        brand: item.brand ?? item.brands ?? undefined,
+        servingUnit: item.servingUnit ?? item.serving_unit ?? undefined,
+        servingQty: item.servingQty ?? item.serving_qty ?? undefined,
+        kcal: item.kcal ?? item.calories ?? undefined,
+        macros: item.macros ?? undefined,
+      }));
+
+      setFoods(normalized);
     } catch (error) {
       console.error("Search error:", error);
       Alert.alert("Error", "Failed to search foods. Please check your connection.");
@@ -77,23 +109,22 @@ export default function AddSearch() {
 
   const handleFoodSelect = async (food: Food) => {
     setSelectedFood(food);
-    
-    // Check for allergens
+
     const foodTags = [food.name.toLowerCase()];
-    if (food.brand) {
-      foodTags.push(food.brand.toLowerCase());
-    }
+    if (food.brand) foodTags.push(food.brand.toLowerCase());
+
     const analysis = await analyzeFood(foodTags);
     setAllergenAnalysis(analysis);
-    
+
     setQuantityModalVisible(true);
   };
 
   const handleAddToMeal = () => {
     if (!selectedFood) return;
-    
+
     const qty = parseFloat(quantity) || 1;
-    setMealItems([...mealItems, { food: selectedFood, qty }]);
+    setMealItems((prev) => [...prev, { food: selectedFood, qty }]);
+
     setQuantityModalVisible(false);
     setSelectedFood(null);
     setQuantity("1");
@@ -101,8 +132,7 @@ export default function AddSearch() {
   };
 
   const handleRemoveItem = (index: number) => {
-    const newItems = mealItems.filter((_, i) => i !== index);
-    setMealItems(newItems);
+    setMealItems((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSaveMeal = async () => {
@@ -119,38 +149,43 @@ export default function AddSearch() {
       }
 
       const now = new Date();
-      const response = await fetch(`${API_BASE}/meals`, {
+      const response = await fetch(`${API_BASE}/api/meals`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           occurred_at: now.toISOString(),
           meal_type: mealType,
-          items: mealItems.map(item => ({
+          items: mealItems.map((item) => ({
             food_id: item.food.id,
             qty: item.qty,
+            food:{
+              name: item.food.name,
+            brand: item.food.brand,
+            barcode: item.food.id,
+            },
           })),
         }),
       });
 
+      const data = await response.json().catch(() => ({}));
+
       if (response.ok) {
-        Alert.alert(
-          "Success!",
-          "Your meal has been saved.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                setMealItems([]);
-                router.back();
-              },
+        Alert.alert("Success!", "Your meal has been saved.", [
+          {
+            text: "OK",
+            onPress: () => {
+              setMealItems([]);
+              router.back();
             },
-          ]
-        );
+          },
+        ]);
       } else {
-        throw new Error("Failed to save meal");
+        console.error("Save meal failed:", response.status, data);
+        Alert.alert("Error", data?.error || data?.message || "Failed to save meal");
       }
     } catch (error) {
       console.error("Save meal error:", error);
@@ -159,10 +194,7 @@ export default function AddSearch() {
   };
 
   const getTotalCalories = () => {
-    return mealItems.reduce((sum, item) => {
-      const calories = item.food.kcal || 0;
-      return sum + (calories * item.qty);
-    }, 0);
+    return mealItems.reduce((sum, item) => sum + (item.food.kcal || 0) * item.qty, 0);
   };
 
   return (
@@ -170,7 +202,12 @@ export default function AddSearch() {
       {/* Search Header */}
       <View style={styles.searchHeader}>
         <View style={styles.searchContainer}>
-          <FontAwesome name="search" size={18} color={Colors.neutral.mutedGray} style={styles.searchIcon} />
+          <FontAwesome
+            name="search"
+            size={18}
+            color={Colors.neutral.mutedGray}
+            style={styles.searchIcon}
+          />
           <TextInput
             style={styles.searchInput}
             placeholder="Search for foods..."
@@ -181,7 +218,11 @@ export default function AddSearch() {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery("")}>
-              <FontAwesome name="times-circle" size={18} color={Colors.neutral.mutedGray} />
+              <FontAwesome
+                name="times-circle"
+                size={18}
+                color={Colors.neutral.mutedGray}
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -192,7 +233,8 @@ export default function AddSearch() {
         <View style={styles.mealSummary}>
           <View style={styles.summaryContent}>
             <Text style={styles.summaryText}>
-              {mealItems.length} item{mealItems.length > 1 ? "s" : ""} • {Math.round(getTotalCalories())} kcal
+              {mealItems.length} item{mealItems.length > 1 ? "s" : ""} •{" "}
+              {Math.round(getTotalCalories())} kcal
             </Text>
             <TouchableOpacity onPress={handleSaveMeal} style={styles.saveButton}>
               <Text style={styles.saveButtonText}>Save Meal</Text>
@@ -203,19 +245,23 @@ export default function AddSearch() {
 
       {/* Meal Items Preview */}
       {mealItems.length > 0 && (
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           style={styles.mealItemsPreview}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.mealItemsContent}
         >
           {mealItems.map((item, index) => (
-            <View key={index} style={styles.mealItemChip}>
+            <View key={`${item.food.id}-${index}`} style={styles.mealItemChip}>
               <Text style={styles.mealItemName} numberOfLines={1}>
                 {item.food.name} ({item.qty}x)
               </Text>
               <TouchableOpacity onPress={() => handleRemoveItem(index)}>
-                <FontAwesome name="times" size={12} color={Colors.neutral.mutedGray} />
+                <FontAwesome
+                  name="times"
+                  size={12}
+                  color={Colors.neutral.mutedGray}
+                />
               </TouchableOpacity>
             </View>
           ))}
@@ -223,10 +269,10 @@ export default function AddSearch() {
       )}
 
       {/* Search Results */}
-      <ScrollView 
+      <ScrollView
         style={styles.resultsContainer}
         contentContainerStyle={styles.resultsContent}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
       >
         {loading && (
           <View style={styles.centerContainer}>
@@ -261,16 +307,15 @@ export default function AddSearch() {
             <View style={styles.foodCardContent}>
               <View style={styles.foodInfo}>
                 <Text style={styles.foodName}>{food.name}</Text>
-                {food.brand && (
-                  <Text style={styles.foodBrand}>{food.brand}</Text>
-                )}
+                {food.brand && <Text style={styles.foodBrand}>{food.brand}</Text>}
                 {food.servingUnit && (
                   <Text style={styles.foodServing}>
                     {food.servingQty || 1} {food.servingUnit}
                   </Text>
                 )}
               </View>
-              {food.kcal && (
+
+              {typeof food.kcal === "number" && (
                 <View style={styles.calorieBadge}>
                   <Text style={styles.calorieText}>{Math.round(food.kcal)}</Text>
                   <Text style={styles.calorieUnit}>kcal</Text>
@@ -289,26 +334,19 @@ export default function AddSearch() {
         animationType="slide"
         onRequestClose={() => setQuantityModalVisible(false)}
       >
-        <Pressable 
-          style={styles.modalOverlay}
-          onPress={() => setQuantityModalVisible(false)}
-        >
+        <Pressable style={styles.modalOverlay} onPress={() => setQuantityModalVisible(false)}>
           <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
             {selectedFood && (
               <>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>{selectedFood.name}</Text>
-                  {selectedFood.brand && (
-                    <Text style={styles.modalBrand}>{selectedFood.brand}</Text>
-                  )}
+                  {selectedFood.brand && <Text style={styles.modalBrand}>{selectedFood.brand}</Text>}
                 </View>
 
-                {selectedFood && allergenAnalysis && (allergenAnalysis.hasAllergenWarning || allergenAnalysis.hasDietaryConflict) && (
-                  <AllergenWarning 
-                    analysis={allergenAnalysis} 
-                    variant="compact"
-                  />
-                )}
+                {allergenAnalysis &&
+                  (allergenAnalysis.hasAllergenWarning || allergenAnalysis.hasDietaryConflict) && (
+                    <AllergenWarning analysis={allergenAnalysis} variant="compact" />
+                  )}
 
                 <View style={styles.quantityContainer}>
                   <Text style={styles.quantityLabel}>Quantity</Text>
@@ -324,7 +362,7 @@ export default function AddSearch() {
                   )}
                 </View>
 
-                {selectedFood.kcal && (
+                {typeof selectedFood.kcal === "number" && (
                   <View style={styles.caloriePreview}>
                     <Text style={styles.caloriePreviewText}>
                       {Math.round((selectedFood.kcal || 0) * (parseFloat(quantity) || 1))} kcal
@@ -355,17 +393,10 @@ export default function AddSearch() {
   );
 }
 
+// ✅ keep your styles exactly as you had them
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.neutral.backgroundLight,
-  },
-  searchHeader: {
-    backgroundColor: Colors.neutral.cardSurface,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
-  },
+  container: { flex: 1, backgroundColor: Colors.neutral.backgroundLight },
+  searchHeader: { backgroundColor: Colors.neutral.cardSurface, padding: 16, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -376,50 +407,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E0E0E0",
   },
-  searchIcon: {
-    marginRight: 12,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: Colors.neutral.textDark,
-  },
-  mealSummary: {
-    backgroundColor: Colors.primary.green,
-    padding: 12,
-  },
-  summaryContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  summaryText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  saveButton: {
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  saveButtonText: {
-    color: Colors.primary.green,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  mealItemsPreview: {
-    maxHeight: 60,
-    backgroundColor: Colors.neutral.cardSurface,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
-  },
-  mealItemsContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
+  searchIcon: { marginRight: 12 },
+  searchInput: { flex: 1, fontSize: 16, color: Colors.neutral.textDark },
+
+  mealSummary: { backgroundColor: Colors.primary.green, padding: 12 },
+  summaryContent: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  summaryText: { color: "#FFFFFF", fontSize: 14, fontWeight: "600" },
+  saveButton: { backgroundColor: "#FFFFFF", paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 },
+  saveButtonText: { color: Colors.primary.green, fontSize: 14, fontWeight: "700" },
+
+  mealItemsPreview: { maxHeight: 60, backgroundColor: Colors.neutral.cardSurface, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
+  mealItemsContent: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
   mealItemChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -432,40 +430,15 @@ const styles = StyleSheet.create({
     borderColor: "#E0E0E0",
     gap: 8,
   },
-  mealItemName: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
-    maxWidth: 120,
-  },
-  resultsContainer: {
-    flex: 1,
-  },
-  resultsContent: {
-    padding: 16,
-  },
-  centerContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
-  },
-  emptyText: {
-    marginTop: 16,
-    fontSize: 18,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
-  },
-  emptySubtext: {
-    marginTop: 8,
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
-  },
+  mealItemName: { fontSize: 13, fontWeight: "600", color: Colors.neutral.textDark, maxWidth: 120 },
+
+  resultsContainer: { flex: 1 },
+  resultsContent: { padding: 16 },
+  centerContainer: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 60 },
+  loadingText: { marginTop: 16, fontSize: 14, color: Colors.neutral.mutedGray },
+  emptyText: { marginTop: 16, fontSize: 18, fontWeight: "600", color: Colors.neutral.textDark },
+  emptySubtext: { marginTop: 8, fontSize: 14, color: Colors.neutral.mutedGray },
+
   foodCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -481,136 +454,34 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
-  foodCardContent: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  foodInfo: {
-    flex: 1,
-  },
-  foodName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
-    marginBottom: 4,
-  },
-  foodBrand: {
-    fontSize: 13,
-    color: Colors.neutral.mutedGray,
-    marginBottom: 4,
-  },
-  foodServing: {
-    fontSize: 12,
-    color: Colors.neutral.mutedGray,
-  },
-  calorieBadge: {
-    alignItems: "center",
-    backgroundColor: `${Colors.primary.green}15`,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginLeft: 12,
-  },
-  calorieText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.primary.green,
-  },
-  calorieUnit: {
-    fontSize: 10,
-    color: Colors.primary.green,
-    textTransform: "uppercase",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: Colors.neutral.cardSurface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    maxHeight: "80%",
-  },
-  modalHeader: {
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: Colors.neutral.textDark,
-    marginBottom: 4,
-  },
-  modalBrand: {
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
-  },
-  quantityContainer: {
-    marginBottom: 20,
-  },
-  quantityLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
-    marginBottom: 8,
-  },
-  quantityInput: {
-    backgroundColor: Colors.neutral.backgroundLight,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 18,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
-  },
-  quantityUnit: {
-    marginTop: 8,
-    fontSize: 13,
-    color: Colors.neutral.mutedGray,
-  },
-  caloriePreview: {
-    backgroundColor: `${Colors.primary.green}10`,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  caloriePreviewText: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: Colors.primary.green,
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  modalButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  cancelButton: {
-    backgroundColor: Colors.neutral.backgroundLight,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: Colors.neutral.textDark,
-  },
-  addButton: {
-    backgroundColor: Colors.primary.green,
-  },
-  addButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
+  foodCardContent: { flex: 1, flexDirection: "row", alignItems: "center", marginRight: 12 },
+  foodInfo: { flex: 1 },
+  foodName: { fontSize: 16, fontWeight: "700", color: Colors.neutral.textDark, marginBottom: 4 },
+  foodBrand: { fontSize: 13, color: Colors.neutral.mutedGray, marginBottom: 4 },
+  foodServing: { fontSize: 12, color: Colors.neutral.mutedGray },
 
+  calorieBadge: { alignItems: "center", backgroundColor: `${Colors.primary.green}15`, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, marginLeft: 12 },
+  calorieText: { fontSize: 16, fontWeight: "700", color: Colors.primary.green },
+  calorieUnit: { fontSize: 10, color: Colors.primary.green, textTransform: "uppercase" },
+
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "flex-end" },
+  modalContent: { backgroundColor: Colors.neutral.cardSurface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: "80%" },
+  modalHeader: { marginBottom: 20 },
+  modalTitle: { fontSize: 22, fontWeight: "800", color: Colors.neutral.textDark, marginBottom: 4 },
+  modalBrand: { fontSize: 14, color: Colors.neutral.mutedGray },
+
+  quantityContainer: { marginBottom: 20 },
+  quantityLabel: { fontSize: 14, fontWeight: "600", color: Colors.neutral.textDark, marginBottom: 8 },
+  quantityInput: { backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0", borderRadius: 12, padding: 16, fontSize: 18, fontWeight: "600", color: Colors.neutral.textDark },
+  quantityUnit: { marginTop: 8, fontSize: 13, color: Colors.neutral.mutedGray },
+
+  caloriePreview: { backgroundColor: `${Colors.primary.green}10`, borderRadius: 12, padding: 16, alignItems: "center", marginBottom: 20 },
+  caloriePreviewText: { fontSize: 24, fontWeight: "700", color: Colors.primary.green },
+
+  modalActions: { flexDirection: "row", gap: 12 },
+  modalButton: { flex: 1, padding: 16, borderRadius: 12, alignItems: "center" },
+  cancelButton: { backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0" },
+  cancelButtonText: { fontSize: 16, fontWeight: "600", color: Colors.neutral.textDark },
+  addButton: { backgroundColor: Colors.primary.green },
+  addButtonText: { fontSize: 16, fontWeight: "700", color: "#FFFFFF" },
 });

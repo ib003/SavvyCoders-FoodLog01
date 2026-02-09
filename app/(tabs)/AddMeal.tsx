@@ -1,213 +1,208 @@
 import { Colors } from "@/constants/Colors";
-import { auth } from "@/lib/auth";
-import { FontAwesome } from "@expo/vector-icons";
-import { Href, useRouter } from "expo-router";
-import React, { useEffect } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import React, { useMemo, useState } from "react";
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
-export default function AddMealTab() {
+type MealType = "Breakfast" | "Lunch" | "Dinner" | "Snack";
+
+export default function AddMeal() {
   const router = useRouter();
 
-  // Check authentication on mount
-  useEffect(() => {
-    const checkAuth = async () => {
-      const isAuth = await auth.isAuthenticated();
-      if (!isAuth) {
-        router.replace("/");
-      }
-    };
-    checkAuth();
-  }, []);
+  const [mealType, setMealType] = useState<MealType>("Breakfast");
+  const [title, setTitle] = useState<string>("");
+  const [notes, setNotes] = useState<string>("");
 
-  const OptionCard = ({ 
-    icon, 
-    iconColor, 
-    iconBg, 
-    title, 
-    description, 
-    to 
-  }: { 
-    icon: string; 
-    iconColor: string; 
-    iconBg: string;
-    title: string; 
-    description: string; 
-    to: Href 
-  }) => (
-    <Pressable 
-      style={styles.optionCard}
-      onPress={() => router.push(to)}
-      android_ripple={{ color: Colors.neutral.mutedGray }}
-    >
-      <View style={[styles.iconContainer, { backgroundColor: iconBg }]}>
-        <FontAwesome name={icon as any} size={28} color={iconColor} />
-      </View>
-      <View style={styles.optionContent}>
-        <Text style={styles.optionTitle}>{title}</Text>
-        <Text style={styles.optionDescription}>{description}</Text>
-      </View>
-      <FontAwesome name="chevron-right" size={20} color={Colors.neutral.mutedGray} />
-    </Pressable>
-  );
+  const canContinue = useMemo(() => {
+    return title.trim().length > 0;
+  }, [title]);
+
+  const onContinue = () => {
+    if (!canContinue) {
+      Alert.alert("Missing info", "Please enter a meal name (example: Chicken Salad).");
+      return;
+    }
+
+    // If you later want to pass data across screens, you can save to localStorage/AsyncStorage.
+    Alert.alert("Saved (local)", `Meal: ${title.trim()}\nType: ${mealType}`, [
+      { text: "OK" },
+    ]);
+  };
 
   return (
-    <ScrollView 
+    <KeyboardAvoidingView
       style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      {/* Header */}
-      <View style={styles.header}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Add Meal</Text>
-        <Text style={styles.subtitle}>Choose how you want to log your meal</Text>
-      </View>
+        <Text style={styles.subtitle}>Pick how you want to add a meal.</Text>
 
-      {/* Options */}
-      <View style={styles.optionsContainer}>
-        <OptionCard
-          icon="search"
-          iconColor={Colors.primary.green}
-          iconBg={`${Colors.primary.green}15`}
-          title="Search Database"
-          description="Search from thousands of foods in our database"
-          to="/search"
-        />
-        
-        <OptionCard
-          icon="bookmark"
-          iconColor={Colors.primary.orange}
-          iconBg={`${Colors.primary.orange}15`}
-          title="Saved Foods"
-          description="Quickly add from your frequently used items"
-          to="/saved"
-        />
-        
-        <OptionCard
-          icon="barcode"
-          iconColor={Colors.primary.yellow}
-          iconBg={`${Colors.primary.yellow}15`}
-          title="Barcode Scan"
-          description="Scan barcodes to check product safety instantly"
-          to="/barcode"
-        />
-        
-        <OptionCard
-          icon="camera"
-          iconColor={Colors.primary.orange}
-          iconBg={`${Colors.primary.orange}15`}
-          title="Add Photo"
-          description="Take a photo of your meal to log it"
-          to="/photo"
-        />
-        
-        <OptionCard
-          icon="edit"
-          iconColor={Colors.neutral.mutedGray}
-          iconBg={`${Colors.neutral.mutedGray}15`}
-          title="Manual Entry"
-          description="Create a custom meal entry manually"
-          to="/search"
-        />
-      </View>
+        {/* Meal basics */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Meal Details</Text>
 
-      {/* Quick Tips */}
-      <View style={styles.tipsContainer}>
-        <View style={styles.tipHeader}>
-          <FontAwesome name="lightbulb-o" size={18} color={Colors.primary.yellow} />
-          <Text style={styles.tipTitle}>Quick Tip</Text>
+          <Text style={styles.label}>Meal Type</Text>
+          <View style={styles.segmentRow}>
+            {(["Breakfast", "Lunch", "Dinner", "Snack"] as MealType[]).map((t) => {
+              const active = t === mealType;
+              return (
+                <Pressable
+                  key={t}
+                  onPress={() => setMealType(t)}
+                  style={[styles.segment, active && styles.segmentActive]}
+                >
+                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                    {t}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={styles.label}>Meal Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Example: Chicken Salad"
+            placeholderTextColor={Colors.neutral.mutedGray}
+            value={title}
+            onChangeText={setTitle}
+            autoCapitalize="words"
+            returnKeyType="done"
+          />
+
+          <Text style={styles.label}>Notes (optional)</Text>
+          <TextInput
+            style={[styles.input, styles.textarea]}
+            placeholder="How did you feel after eating? Any ingredients?"
+            placeholderTextColor={Colors.neutral.mutedGray}
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+          />
+
+          <Pressable
+            style={[styles.primaryBtn, !canContinue && styles.btnDisabled]}
+            onPress={onContinue}
+            disabled={!canContinue}
+          >
+            <Text style={styles.primaryBtnText}>Save Meal (local)</Text>
+          </Pressable>
         </View>
-        <Text style={styles.tipText}>
-          Use the search to find foods quickly, or save your favorites for faster logging!
+
+        {/* Add methods */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Add Using</Text>
+
+          <Pressable style={styles.actionBtn} onPress={() => router.push("/add/search")}>
+            <Text style={styles.actionTitle}>🔎 Search Foods</Text>
+            <Text style={styles.actionSub}>Find foods from the database</Text>
+          </Pressable>
+
+          <Pressable style={styles.actionBtn} onPress={() => router.push("/add/saved")}>
+            <Text style={styles.actionTitle}>⭐ Saved Foods</Text>
+            <Text style={styles.actionSub}>Pick from your saved list</Text>
+          </Pressable>
+
+          <Pressable style={styles.actionBtn} onPress={() => router.push("/add/barcode")}>
+            <Text style={styles.actionTitle}>📦 Scan Barcode</Text>
+            <Text style={styles.actionSub}>Scan packaged items</Text>
+          </Pressable>
+
+          <Pressable style={styles.actionBtn} onPress={() => router.push("/add/photo")}>
+            <Text style={styles.actionTitle}>📷 Photo Log</Text>
+            <Text style={styles.actionSub}>Snap a picture of your meal</Text>
+          </Pressable>
+
+          <Pressable style={styles.actionBtn} onPress={() => router.push("/add/symptom")}>
+            <Text style={styles.actionTitle}>🩺 Symptom Log</Text>
+            <Text style={styles.actionSub}>Track symptoms after meals</Text>
+          </Pressable>
+        </View>
+
+        <Text style={styles.footerNote}>
+          If any of these pages show “route not found”, it means the file is missing in{" "}
+          <Text style={styles.mono}>app/add/</Text>.
         </Text>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.neutral.backgroundLight,
-  },
-  scrollContent: {
-    padding: 20,
-  },
-  header: {
-    marginBottom: 32,
-    paddingTop: 8,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: Colors.neutral.textDark,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: Colors.neutral.mutedGray,
-    lineHeight: 22,
-  },
-  optionsContainer: {
-    marginBottom: 24,
-  },
-  optionCard: {
-    flexDirection: "row",
-    alignItems: "center",
+  container: { flex: 1, backgroundColor: Colors.neutral.backgroundLight },
+  content: { padding: 20, paddingBottom: 40, gap: 14 },
+
+  title: { fontSize: 30, fontWeight: "800", color: Colors.neutral.textDark },
+  subtitle: { fontSize: 14, color: Colors.neutral.mutedGray, marginBottom: 4 },
+
+  card: {
     backgroundColor: Colors.neutral.cardSurface,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#F0F0F0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 16,
-  },
-  optionContent: {
-    flex: 1,
-  },
-  optionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
-    marginBottom: 4,
-  },
-  optionDescription: {
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
-    lineHeight: 20,
-  },
-  tipsContainer: {
-    backgroundColor: `${Colors.primary.yellow}10`,
-    borderRadius: 12,
+    borderColor: "#E6E6E6",
+    borderRadius: 16,
     padding: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.primary.yellow,
+    gap: 12,
   },
-  tipHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  tipTitle: {
-    fontSize: 15,
-    fontWeight: "700",
+  cardTitle: { fontSize: 16, fontWeight: "700", color: Colors.neutral.textDark },
+
+  label: { fontSize: 13, fontWeight: "600", color: Colors.neutral.textDark },
+  input: {
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
     color: Colors.neutral.textDark,
-    marginLeft: 8,
+    backgroundColor: "#fff",
   },
-  tipText: {
-    fontSize: 13,
-    color: Colors.neutral.mutedGray,
-    lineHeight: 20,
+  textarea: { minHeight: 90, textAlignVertical: "top" },
+
+  segmentRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  segment: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    backgroundColor: "#fff",
   },
+  segmentActive: {
+    borderColor: Colors.primary.green,
+    backgroundColor: "rgba(46, 204, 113, 0.10)",
+  },
+  segmentText: { color: Colors.neutral.textDark, fontWeight: "600" },
+  segmentTextActive: { color: Colors.primary.green },
+
+  primaryBtn: {
+    backgroundColor: Colors.primary.green,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  btnDisabled: { opacity: 0.5 },
+  primaryBtnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
+
+  actionBtn: {
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 14,
+    gap: 4,
+  },
+  actionTitle: { fontSize: 16, fontWeight: "800", color: Colors.neutral.textDark },
+  actionSub: { fontSize: 13, color: Colors.neutral.mutedGray },
+
+  footerNote: { fontSize: 12, color: Colors.neutral.mutedGray, marginTop: 6 },
+  mono: { fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }) },
 });

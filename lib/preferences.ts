@@ -9,7 +9,6 @@ export interface UserPreferences {
   dietaryPreferences: string[];
 }
 
-// Common allergens list
 export const COMMON_ALLERGENS = [
   "Peanuts",
   "Tree Nuts",
@@ -24,7 +23,6 @@ export const COMMON_ALLERGENS = [
   "Sulfites",
 ];
 
-// Common dietary preferences/tags
 export const COMMON_DIETARY_PREFERENCES = [
   "Vegan",
   "Vegetarian",
@@ -39,22 +37,26 @@ export const COMMON_DIETARY_PREFERENCES = [
   "Low-Fat",
 ];
 
+async function readErrorBody(res: Response) {
+  const text = await res.text().catch(() => "");
+  try {
+    return text ? JSON.parse(text) : text;
+  } catch {
+    return text;
+  }
+}
+
 export const preferences = {
-  // Load preferences from local storage
   async loadLocal(): Promise<UserPreferences> {
     try {
       const data = await AsyncStorage.getItem(PREFERENCES_KEY);
-      if (data) {
-        return JSON.parse(data);
-      }
-      return { allergies: [], dietaryPreferences: [] };
+      if (data) return JSON.parse(data);
     } catch (e) {
       console.error("Failed to load local preferences:", e);
-      return { allergies: [], dietaryPreferences: [] };
     }
+    return { allergies: [], dietaryPreferences: [] };
   },
 
-  // Save preferences to local storage
   async saveLocal(prefs: UserPreferences): Promise<void> {
     try {
       await AsyncStorage.setItem(PREFERENCES_KEY, JSON.stringify(prefs));
@@ -63,66 +65,67 @@ export const preferences = {
     }
   },
 
-  // Fetch preferences from backend
   async fetch(): Promise<UserPreferences> {
     try {
       const token = await auth.getToken();
-      if (!token) {
-        // If not authenticated, return local preferences
-        return await this.loadLocal();
-      }
+      if (!token) return await this.loadLocal();
 
-      const response = await fetch(`${API_BASE}/user/preferences`, {
+      const res = await fetch(`${API_BASE}/api/user/preferences`, {
         method: "GET",
         headers: {
-          "Authorization": `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       });
 
-      if (!response.ok) {
-        // If API fails, return local preferences
+      if (res.status === 401) {
+        await auth.logout();
         return await this.loadLocal();
       }
 
-      const data = await response.json();
-      // Sync with local storage
+      if (!res.ok) {
+        const body = await readErrorBody(res);
+        console.error("Fetch preferences failed:", res.status, body);
+        return await this.loadLocal();
+      }
+
+      const data = (await res.json()) as UserPreferences;
       await this.saveLocal(data);
       return data;
-    } catch (error) {
-      console.error("Failed to fetch preferences:", error);
+    } catch (e) {
+      console.error("Failed to fetch preferences:", e);
       return await this.loadLocal();
     }
   },
 
-  // Save preferences to backend
   async save(prefs: UserPreferences): Promise<void> {
+    await this.saveLocal(prefs);
+
     try {
-      // Save locally first for offline support
-      await this.saveLocal(prefs);
-
       const token = await auth.getToken();
-      if (!token) {
-        // If not authenticated, only save locally
-        return;
-      }
+      if (!token) return;
 
-      const response = await fetch(`${API_BASE}/user/preferences`, {
+      const res = await fetch(`${API_BASE}/api/user/preferences`, {
         method: "PUT",
         headers: {
-          "Authorization": `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(prefs),
       });
 
-      if (!response.ok) {
+      if (res.status === 401) {
+        await auth.logout();
+        return;
+      }
+
+      if (!res.ok) {
+        const body = await readErrorBody(res);
+        console.error("Save preferences failed:", res.status, body);
         throw new Error("Failed to save preferences");
       }
-    } catch (error) {
-      console.error("Failed to save preferences:", error);
-      // Preferences are saved locally, so they'll sync later
+    } catch (e) {
+      console.error("Failed to save preferences:", e);
     }
   },
 };
-

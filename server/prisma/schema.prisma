@@ -45,10 +45,10 @@ model User {
   id    String @id @default(uuid())
   email String @unique
 
-  // ✅ Email/password login (nullable for Google-only users)
+  // Email/password login (nullable for Google-only users)
   passwordHash String?
 
-  // ✅ Google login
+  // Google login
   googleSub String? @unique // Google's stable user id ("sub")
   photoUrl  String?
 
@@ -73,6 +73,9 @@ model User {
   meals              Meal[]
   symptomLogs        SymptomLog[]
   verificationTokens VerificationToken[]
+
+  // ✅ NEW: preferences (1-to-1)
+  preferences UserPreferences?
 }
 
 // Master list of allergies (e.g., Peanuts, Gluten, Lactose)
@@ -129,6 +132,10 @@ model Food {
 
   mealItems MealItem[]
   allergens FoodAllergen[]
+
+  // ✅ Keep your indexes here (merged from the duplicate model)
+  @@index([name])
+  @@index([brand])
 }
 
 // Join: which food contains which allergy
@@ -229,4 +236,14 @@ model VerificationToken {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime              @default(now())
+}
+
+// ✅ NEW: 1-to-1 preferences per user
+model UserPreferences {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  allergies          String[] @default([])
+  dietaryPreferences String[] @default([])
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

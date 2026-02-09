@@ -1,21 +1,27 @@
-// server/src/server.ts
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
 
+import preferencesRoutes from "./routes/preferences.routes";
 import authRoutes from "./routes/auth.routes";
-import apiRoutes from "./api";
 import aiRoutes from "./routes/ai.routes";
+
+import foodsRoutes from "./api/foods.routes";
+import mealsRoutes from "./api/meals.routes";
 
 const app = express();
 
-app.use(cors());
+app.use(cors({ origin: "*", credentials: true }));
 app.use(express.json());
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
-app.use("/ai", aiRoutes);
+
 app.use("/auth", authRoutes);
-app.use("/api", apiRoutes);
+app.use("/ai", aiRoutes);
+
+app.use("/api/user", preferencesRoutes); // IMPORTANT: mount on /api/user
+app.use("/api/foods", foodsRoutes);
+app.use("/api/meals", mealsRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(Number(PORT), "0.0.0.0", () => {

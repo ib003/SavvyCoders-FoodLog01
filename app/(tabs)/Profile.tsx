@@ -4,29 +4,54 @@ import { UserPreferences, preferences } from "@/lib/preferences";
 import { FontAwesome } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export default function Profile() {
   const router = useRouter();
+
   const [email, setEmail] = useState<string | null>(null);
-  const [userPrefs, setUserPrefs] = useState<UserPreferences>({ allergies: [], dietaryPreferences: [] });
+  const [userPrefs, setUserPrefs] = useState<UserPreferences>({
+    allergies: [],
+    dietaryPreferences: [],
+  });
 
-  // Check authentication on mount (but allow dev mode bypass)
   useEffect(() => {
-    const checkAuthAndLoad = async () => {
-      const isAuth = await auth.isAuthenticated();
-      // In dev mode, isAuthenticated returns true, so this won't redirect
-      if (!isAuth) {
-        router.replace("/");
-        return;
-      }
-      loadUserData();
-      loadPreferences();
-    };
-    checkAuthAndLoad();
-  }, []);
+    let mounted = true;
 
-  // Refresh preferences when screen comes into focus
+    const checkAuthAndLoad = async () => {
+      try {
+        const isAuth = await auth.isAuthenticated();
+
+        if (!isAuth) {
+          router.replace("/(auth)");
+          return;
+        }
+
+        if (!mounted) return;
+
+        await loadUserData();
+        await loadPreferences();
+      } catch (e) {
+        console.error("Profile auth/load error:", e);
+        router.replace("/(auth)");
+      }
+    };
+
+    checkAuthAndLoad();
+
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
+
   useFocusEffect(
     useCallback(() => {
       loadPreferences();
@@ -47,52 +72,54 @@ export default function Profile() {
     }
   };
 
-  const getInitials = (email: string | null) => {
-    if (!email) return "U";
-    const parts = email.split("@")[0];
-    return parts.length > 0 ? parts[0].toUpperCase() : "U";
+  const getInitials = (emailValue: string | null) => {
+    if (!emailValue) return "U";
+    const part = emailValue.split("@")[0] || "";
+    return part.length > 0 ? part[0].toUpperCase() : "U";
+  };
+
+  // ✅ Always works (tabs don't really "go back")
+  const goBackToDashboard = () => {
+    router.replace("/(tabs)/Dashboard");
   };
 
   const onLogout = async () => {
-    Alert.alert(
-      "Sign Out",
-      "Are you sure you want to sign out?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Sign Out",
-          style: "destructive",
-          onPress: async () => {
-            await auth.clear();
-            router.replace("/");
-          },
-        },
-      ]
-    );
-  };
-
+  Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+    { text: "Cancel", style: "cancel" },
+    {
+      text: "Sign Out",
+      style: "destructive",
+      onPress: async () => {
+        await auth.logout();          
+        router.replace("/(auth)");    
+      },
+    },
+  ]);
+};
   const handleContactSupport = () => {
-    const email = "mocksupport@foodlogapp.com";
+    const supportEmail = "mocksupport@foodlogapp.com";
     const subject = "App Support Request";
     const body = "Hello,\n\nI need help with:\n\n";
-    const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    
+    const mailtoUrl = `mailto:${supportEmail}?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(body)}`;
+
     Linking.openURL(mailtoUrl).catch(() => {
-      Alert.alert("Error", "Unable to open email client. Please contact us at mocksupport@foodlogapp.com");
+      Alert.alert(
+        "Error",
+        "Unable to open email client. Please contact us at mocksupport@foodlogapp.com"
+      );
     });
   };
 
   return (
     <View style={styles.container}>
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header Section with Gradient-like Background */}
+      <ScrollView
+  style={styles.scrollView}
+  contentContainerStyle={[styles.scrollContent, { paddingBottom: 140 }]} 
+  showsVerticalScrollIndicator={false}
+>
+        {/* Header */}
         <View style={styles.headerSection}>
           <View style={styles.headerContent}>
             <View style={styles.avatarContainer}>
@@ -103,98 +130,165 @@ export default function Profile() {
                 <FontAwesome name="check" size={12} color="#FFFFFF" />
               </View>
             </View>
+
             <Text style={styles.greeting}>Welcome back!</Text>
             <Text style={styles.userName}>{email?.split("@")[0] || "User"}</Text>
+
+            {/* ✅ FIX: Add a real back button */}
+            <TouchableOpacity
+              onPress={goBackToDashboard}
+              activeOpacity={0.85}
+              style={styles.backBtn}
+            >
+              <FontAwesome name="arrow-left" size={16} color="#fff" />
+              <Text style={styles.backBtnText}>Back to Dashboard</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Account Information Card */}
+        {/* Account Info */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account Information</Text>
           <View style={styles.card}>
             <View style={styles.cardRow}>
               <View style={styles.cardIconContainer}>
-                <FontAwesome name="envelope" size={18} color={Colors.primary.green} />
+                <FontAwesome
+                  name="envelope"
+                  size={18}
+                  color={Colors.primary.green}
+                />
               </View>
               <View style={styles.cardContent}>
                 <Text style={styles.cardLabel}>Email Address</Text>
-                <Text style={[styles.cardValue, { marginTop: 2 }]} numberOfLines={1}>{email ?? "Not available"}</Text>
+                <Text style={[styles.cardValue, { marginTop: 2 }]} numberOfLines={1}>
+                  {email ?? "Not available"}
+                </Text>
               </View>
-              <FontAwesome name="chevron-right" size={16} color={Colors.neutral.mutedGray} />
+              <FontAwesome
+                name="chevron-right"
+                size={16}
+                color={Colors.neutral.mutedGray}
+              />
             </View>
           </View>
         </View>
 
-        {/* Allergies & Dietary Preferences Card */}
+        {/* Health & Preferences */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Health & Preferences</Text>
           <View style={styles.card}>
-            <TouchableOpacity 
-              style={styles.cardRow} 
+            <TouchableOpacity
+              style={styles.cardRow}
               activeOpacity={0.7}
               onPress={() => router.push("/(tabs)/AllergiesPreferences")}
             >
-              <View style={[styles.cardIconContainer, { backgroundColor: `${Colors.primary.orange}15` }]}>
-                <FontAwesome name="exclamation-triangle" size={18} color={Colors.primary.orange} />
+              <View
+                style={[
+                  styles.cardIconContainer,
+                  { backgroundColor: `${Colors.primary.orange}15` },
+                ]}
+              >
+                <FontAwesome
+                  name="exclamation-triangle"
+                  size={18}
+                  color={Colors.primary.orange}
+                />
               </View>
               <View style={styles.cardContent}>
                 <Text style={styles.cardLabel}>Allergies & Intolerances</Text>
                 <Text style={[styles.cardSubtext, { marginTop: 2 }]}>
-                  {userPrefs.allergies?.length > 0 
-                    ? `${userPrefs.allergies.length} ${userPrefs.allergies.length === 1 ? 'allergy' : 'allergies'} set`
+                  {userPrefs.allergies?.length > 0
+                    ? `${userPrefs.allergies.length} ${
+                        userPrefs.allergies.length === 1 ? "allergy" : "allergies"
+                      } set`
                     : "Not set"}
                 </Text>
               </View>
-              <FontAwesome name="chevron-right" size={16} color={Colors.neutral.mutedGray} />
+              <FontAwesome
+                name="chevron-right"
+                size={16}
+                color={Colors.neutral.mutedGray}
+              />
             </TouchableOpacity>
-            
+
             <View style={styles.cardDivider} />
-            
-            <TouchableOpacity 
-              style={styles.cardRow} 
+
+            <TouchableOpacity
+              style={styles.cardRow}
               activeOpacity={0.7}
               onPress={() => router.push("/(tabs)/AllergiesPreferences")}
             >
-              <View style={[styles.cardIconContainer, { backgroundColor: `${Colors.primary.green}15` }]}>
+              <View
+                style={[
+                  styles.cardIconContainer,
+                  { backgroundColor: `${Colors.primary.green}15` },
+                ]}
+              >
                 <FontAwesome name="leaf" size={18} color={Colors.primary.green} />
               </View>
               <View style={styles.cardContent}>
                 <Text style={styles.cardLabel}>Dietary Preferences</Text>
                 <Text style={[styles.cardSubtext, { marginTop: 2 }]}>
-                  {userPrefs.dietaryPreferences?.length > 0 
-                    ? `${userPrefs.dietaryPreferences.length} ${userPrefs.dietaryPreferences.length === 1 ? 'preference' : 'preferences'} set`
+                  {userPrefs.dietaryPreferences?.length > 0
+                    ? `${userPrefs.dietaryPreferences.length} ${
+                        userPrefs.dietaryPreferences.length === 1
+                          ? "preference"
+                          : "preferences"
+                      } set`
                     : "Not set"}
                 </Text>
               </View>
-              <FontAwesome name="chevron-right" size={16} color={Colors.neutral.mutedGray} />
+              <FontAwesome
+                name="chevron-right"
+                size={16}
+                color={Colors.neutral.mutedGray}
+              />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Security & Sync Card */}
+        {/* Security & Sync */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Security & Sync</Text>
           <View style={styles.card}>
             <TouchableOpacity style={styles.cardRow} activeOpacity={0.7}>
-              <View style={[styles.cardIconContainer, { backgroundColor: `${Colors.primary.green}15` }]}>
+              <View
+                style={[
+                  styles.cardIconContainer,
+                  { backgroundColor: `${Colors.primary.green}15` },
+                ]}
+              >
                 <FontAwesome name="lock" size={18} color={Colors.primary.green} />
               </View>
               <View style={styles.cardContent}>
                 <Text style={styles.cardLabel}>Account Security</Text>
-                <Text style={[styles.cardSubtext, { marginTop: 2 }]}>Password protected</Text>
+                <Text style={[styles.cardSubtext, { marginTop: 2 }]}>
+                  Password protected
+                </Text>
               </View>
-              <FontAwesome name="chevron-right" size={16} color={Colors.neutral.mutedGray} />
+              <FontAwesome
+                name="chevron-right"
+                size={16}
+                color={Colors.neutral.mutedGray}
+              />
             </TouchableOpacity>
-            
+
             <View style={styles.cardDivider} />
-            
+
             <View style={styles.cardRow}>
-              <View style={[styles.cardIconContainer, { backgroundColor: `${Colors.primary.orange}15` }]}>
+              <View
+                style={[
+                  styles.cardIconContainer,
+                  { backgroundColor: `${Colors.primary.orange}15` },
+                ]}
+              >
                 <FontAwesome name="cloud" size={18} color={Colors.primary.orange} />
               </View>
               <View style={styles.cardContent}>
                 <Text style={styles.cardLabel}>Cloud Sync</Text>
-                <Text style={[styles.cardSubtext, { marginTop: 2 }]}>Active across all devices</Text>
+                <Text style={[styles.cardSubtext, { marginTop: 2 }]}>
+                  Active across all devices
+                </Text>
               </View>
               <View style={styles.statusBadge}>
                 <View style={styles.statusDot} />
@@ -217,25 +311,22 @@ export default function Profile() {
           </View>
         </View>
 
-        {/* Sign Out Button */}
-        <TouchableOpacity 
-          style={styles.logoutButton} 
-          onPress={onLogout}
-          activeOpacity={0.8}
-        >
+        {/* Logout */}
+        <TouchableOpacity style={styles.logoutButton} onPress={onLogout} activeOpacity={0.8}>
           <View style={styles.logoutButtonContent}>
             <FontAwesome name="sign-out" size={18} color="#FFFFFF" />
             <Text style={styles.logoutButtonText}>Sign Out</Text>
           </View>
         </TouchableOpacity>
 
-        {/* Contact Support Link */}
-        <TouchableOpacity 
-          style={styles.supportLink} 
-          onPress={handleContactSupport}
-          activeOpacity={0.7}
-        >
-          <FontAwesome name="envelope" size={16} color={Colors.primary.green} style={{ marginRight: 8 }} />
+        {/* Support */}
+        <TouchableOpacity style={styles.supportLink} onPress={handleContactSupport} activeOpacity={0.7}>
+          <FontAwesome
+            name="envelope"
+            size={16}
+            color={Colors.primary.green}
+            style={{ marginRight: 8 }}
+          />
           <Text style={styles.supportLinkText}>Contact Support</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -244,17 +335,10 @@ export default function Profile() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.neutral.backgroundLight,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 32,
-  },
-  // Header Section
+  container: { flex: 1, backgroundColor: Colors.neutral.backgroundLight },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingBottom: 32 },
+
   headerSection: {
     backgroundColor: Colors.primary.green,
     paddingTop: 60,
@@ -269,13 +353,9 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
-  headerContent: {
-    alignItems: "center",
-  },
-  avatarContainer: {
-    position: "relative",
-    marginBottom: 16,
-  },
+  headerContent: { alignItems: "center" },
+
+  avatarContainer: { position: "relative", marginBottom: 16 },
   avatar: {
     width: 100,
     height: 100,
@@ -315,6 +395,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
+
   greeting: {
     fontSize: 16,
     fontWeight: "600",
@@ -327,11 +408,20 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     textTransform: "capitalize",
   },
-  // Section Styles
-  section: {
-    marginBottom: 24,
-    paddingHorizontal: 20,
+
+  backBtn: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.18)",
   },
+  backBtnText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+
+  section: { marginBottom: 24, paddingHorizontal: 20 },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
@@ -339,7 +429,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     letterSpacing: 0.3,
   },
-  // Card Styles
+
   card: {
     backgroundColor: Colors.neutral.cardSurface,
     borderRadius: 16,
@@ -350,11 +440,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 3,
   },
-  cardRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-  },
+  cardRow: { flexDirection: "row", alignItems: "center", padding: 16 },
   cardIconContainer: {
     width: 44,
     height: 44,
@@ -364,31 +450,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 12,
   },
-  cardContent: {
-    flex: 1,
-  },
+  cardContent: { flex: 1 },
   cardLabel: {
     fontSize: 15,
     fontWeight: "600",
     color: Colors.neutral.textDark,
     marginBottom: 2,
   },
-  cardValue: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: Colors.neutral.mutedGray,
-  },
-  cardSubtext: {
-    fontSize: 13,
-    fontWeight: "400",
-    color: Colors.neutral.mutedGray,
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: "#F0F0F0",
-    marginHorizontal: 16,
-  },
-  // Status Badge
+  cardValue: { fontSize: 14, fontWeight: "500", color: Colors.neutral.mutedGray },
+  cardSubtext: { fontSize: 13, fontWeight: "400", color: Colors.neutral.mutedGray },
+  cardDivider: { height: 1, backgroundColor: "#F0F0F0", marginHorizontal: 16 },
+
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -397,18 +469,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.primary.green,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Colors.primary.green,
-  },
-  // Info Banner
+  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.primary.green },
+  statusText: { fontSize: 12, fontWeight: "600", color: Colors.primary.green },
+
   infoBanner: {
     flexDirection: "row",
     backgroundColor: Colors.neutral.cardSurface,
@@ -433,22 +496,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 16,
   },
-  infoContent: {
-    flex: 1,
-  },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
-    marginBottom: 4,
-  },
-  infoText: {
-    fontSize: 13,
-    fontWeight: "400",
-    color: Colors.neutral.mutedGray,
-    lineHeight: 18,
-  },
-  // Logout Button
+  infoContent: { flex: 1 },
+  infoTitle: { fontSize: 16, fontWeight: "700", color: Colors.neutral.textDark, marginBottom: 4 },
+  infoText: { fontSize: 13, fontWeight: "400", color: Colors.neutral.mutedGray, lineHeight: 18 },
+
   logoutButton: {
     marginHorizontal: 20,
     marginTop: 8,
@@ -460,6 +511,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
     overflow: "hidden",
+    zIndex: 50,
   },
   logoutButtonContent: {
     flexDirection: "row",
@@ -468,13 +520,16 @@ const styles = StyleSheet.create({
     padding: 18,
     gap: 10,
   },
-  logoutButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+  logoutButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700", letterSpacing: 0.5 },
+
+  supportLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 32,
+    paddingVertical: 12,
   },
-  //contact support
-  supportLink: { flexDirection: "row", alignItems: "center",justifyContent: "center", marginHorizontal: 20, marginTop: 16, marginBottom: 32, paddingVertical: 12 },
-  supportLinkText: { fontSize: 14, fontWeight: "600", color: Colors.primary.green,},
+  supportLinkText: { fontSize: 14, fontWeight: "600", color: Colors.primary.green },
 });

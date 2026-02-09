@@ -1,6 +1,6 @@
-import { auth } from "@/lib/auth";
 import { API_BASE } from "@/constants/api";
 import { Colors } from "@/constants/Colors";
+import { auth } from "@/lib/auth";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -25,7 +25,7 @@ WebBrowser.maybeCompleteAuthSession();
 export default function Register() {
   const router = useRouter();
 
-  // ✅ IMPORTANT: explicitly type these as strings so trim() is never red
+  // typed so trim() never goes red
   const [name, setName] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
@@ -35,7 +35,7 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
 
-  // ✅ Google OAuth IDs (from your Expo root .env)
+  // Google OAuth IDs
   const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || "";
   const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "";
 
@@ -45,10 +45,7 @@ export default function Register() {
       webClientId: webClientId || undefined,
     });
 
-  // ✅ DO NOT auto-redirect away from Register
-  // (people come here to create a new account)
-
-  // Handle Google response
+  // handle google response
   useEffect(() => {
     if (!googleResponse) return;
     if (googleResponse.type !== "success") return;
@@ -66,10 +63,7 @@ export default function Register() {
   const clearSession = async () => {
     try {
       await auth.clear();
-      Alert.alert(
-        "Cleared",
-        "Saved login cleared. You can sign up with a new email now."
-      );
+      Alert.alert("Cleared", "Saved login cleared. You can sign up with a new email now.");
     } catch (e: any) {
       console.error("Clear session error:", e);
       Alert.alert("Error", e?.message || "Failed to clear saved session.");
@@ -92,10 +86,7 @@ export default function Register() {
     }
 
     if (password.length < 8) {
-      Alert.alert(
-        "Weak Password",
-        "Password must be at least 8 characters long."
-      );
+      Alert.alert("Weak Password", "Password must be at least 8 characters long.");
       return;
     }
 
@@ -106,7 +97,6 @@ export default function Register() {
 
     setLoading(true);
     try {
-      // ✅ FIX: backend requires name, and auth.register signature requires name
       const result = await auth.register(cleanEmail, password, cleanName);
 
       if (result?.token) {
@@ -118,8 +108,8 @@ export default function Register() {
       }
     } catch (error: any) {
       console.error("Registration error:", error);
-      const errorMessage =
-        error?.message || "Unable to create account. Please try again.";
+
+      const errorMessage = error?.message || "Unable to create account. Please try again.";
 
       Alert.alert("Registration Failed", errorMessage, [
         { text: "OK", style: "default" },
@@ -130,7 +120,7 @@ export default function Register() {
                 onPress: () => {
                   Alert.alert(
                     "Server Connection",
-                    `Make sure your server is running at:\n\n${API_BASE}\n\nAnd your phone is on the same Wi-Fi as your Mac.`
+                    `Make sure your server is running at:\n\n${API_BASE}\n\nAnd your device is on the same Wi-Fi as your Mac.`
                   );
                 },
               },
@@ -158,7 +148,7 @@ export default function Register() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           idToken,
-          name: name.trim() || undefined, // optional (backend may ignore)
+          name: name.trim() || undefined,
         }),
       });
 
@@ -193,29 +183,33 @@ export default function Register() {
     }
 
     try {
-      // ✅ Expo Go redirect fix
       await promptGoogle({ useProxy: true } as any);
     } catch (e: any) {
       Alert.alert("Google Sign-In Failed", e?.message || "Please try again.");
     }
   };
 
+  // ✅ disable create account until valid
+  const disableCreate =
+    loading ||
+    !name.trim() ||
+    !email.trim() ||
+    !password ||
+    !confirmPassword ||
+    password !== confirmPassword;
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="always">
         <View style={styles.header}>
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>Sign up to get started</Text>
         </View>
 
         <View style={styles.form}>
-          {/* ✅ Name (required by backend) */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Name</Text>
             <TextInput
@@ -258,10 +252,7 @@ export default function Register() {
                 onChangeText={setPassword}
                 editable={!loading}
               />
-              <Pressable
-                style={styles.eyeIcon}
-                onPress={() => setShowPassword((v) => !v)}
-              >
+              <Pressable style={styles.eyeIcon} onPress={() => setShowPassword((v) => !v)}>
                 <FontAwesome
                   name={showPassword ? "eye-slash" : "eye"}
                   size={20}
@@ -286,10 +277,7 @@ export default function Register() {
                 onChangeText={setConfirmPassword}
                 editable={!loading}
               />
-              <Pressable
-                style={styles.eyeIcon}
-                onPress={() => setShowConfirmPassword((v) => !v)}
-              >
+              <Pressable style={styles.eyeIcon} onPress={() => setShowConfirmPassword((v) => !v)}>
                 <FontAwesome
                   name={showConfirmPassword ? "eye-slash" : "eye"}
                   size={20}
@@ -299,10 +287,14 @@ export default function Register() {
             </View>
           </View>
 
+          {/* ✅ Correct Create Account button */}
           <Pressable
-            style={[styles.primaryButton, loading && styles.buttonDisabled]}
+            style={[
+              styles.primaryButton,
+              disableCreate && styles.buttonDisabled,
+            ]}
             onPress={handleRegister}
-            disabled={loading}
+            disabled={disableCreate}
           >
             {loading ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -325,29 +317,19 @@ export default function Register() {
             onPress={onPressGoogle}
             disabled={loading || !googleRequest}
           >
-            <FontAwesome
-              name="google"
-              size={20}
-              color={Colors.neutral.textDark}
-            />
+            <FontAwesome name="google" size={20} color={Colors.neutral.textDark} />
             <Text style={styles.oauthButtonText}>Continue with Google</Text>
           </Pressable>
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account? </Text>
-            <Pressable onPress={() => router.back()} disabled={loading}>
+            <Pressable onPress={() => router.replace("/(auth)")} disabled={loading}>
               <Text style={styles.footerLink}>Sign In</Text>
             </Pressable>
           </View>
 
-          <Pressable
-            onPress={clearSession}
-            disabled={loading}
-            style={styles.clearSessionBtn}
-          >
-            <Text style={styles.clearSessionText}>
-              Clear saved login (switch account)
-            </Text>
+          <Pressable onPress={clearSession} disabled={loading} style={styles.clearSessionBtn}>
+            <Text style={styles.clearSessionText}>Clear saved login (switch account)</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -359,12 +341,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.neutral.backgroundLight },
   scrollContent: { flexGrow: 1, justifyContent: "center", padding: 24 },
   header: { alignItems: "center", marginBottom: 40 },
-  title: {
-    fontSize: 36,
-    fontWeight: "800",
-    color: Colors.neutral.textDark,
-    marginBottom: 8,
-  },
+  title: { fontSize: 36, fontWeight: "800", color: Colors.neutral.textDark, marginBottom: 8 },
   subtitle: { fontSize: 16, color: Colors.neutral.mutedGray },
   form: { gap: 20 },
   inputContainer: { gap: 8 },
@@ -386,12 +363,7 @@ const styles = StyleSheet.create({
     borderColor: "#E0E0E0",
     borderRadius: 12,
   },
-  passwordInput: {
-    flex: 1,
-    padding: 16,
-    fontSize: 16,
-    color: Colors.neutral.textDark,
-  },
+  passwordInput: { flex: 1, padding: 16, fontSize: 16, color: Colors.neutral.textDark },
   eyeIcon: { padding: 16 },
   hint: { fontSize: 12, color: Colors.neutral.mutedGray, marginTop: -4 },
   primaryButton: {
@@ -405,12 +377,7 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   divider: { flexDirection: "row", alignItems: "center", marginVertical: 8 },
   dividerLine: { flex: 1, height: 1, backgroundColor: "#E0E0E0" },
-  dividerText: {
-    marginHorizontal: 16,
-    fontSize: 14,
-    color: Colors.neutral.mutedGray,
-    fontWeight: "500",
-  },
+  dividerText: { marginHorizontal: 16, fontSize: 14, color: Colors.neutral.mutedGray, fontWeight: "500" },
   oauthButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -422,11 +389,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 12,
   },
-  oauthButtonText: {
-    color: Colors.neutral.textDark,
-    fontSize: 16,
-    fontWeight: "600",
-  },
+  oauthButtonText: { color: Colors.neutral.textDark, fontSize: 16, fontWeight: "600" },
   footer: { flexDirection: "row", justifyContent: "center", marginTop: 8 },
   footerText: { fontSize: 14, color: Colors.neutral.mutedGray },
   footerLink: { fontSize: 14, color: Colors.primary.green, fontWeight: "600" },

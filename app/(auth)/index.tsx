@@ -1,9 +1,10 @@
+// app/(auth)/index.tsx
 import { API_BASE } from "@/constants/api";
 import { Colors } from "@/constants/Colors";
 import { auth } from "@/lib/auth";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -22,20 +23,18 @@ import * as WebBrowser from "expo-web-browser";
 
 WebBrowser.maybeCompleteAuthSession();
 
-export default function Login() {
+export default function AuthIndexLogin() {
   const router = useRouter();
 
-  // ✅ type these so trim() never turns red
-  const [email, setEmail] = useState<string>("");
-  const [password, setPassword] = useState<string>("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-  const [loading, setLoading] = useState<boolean>(false);
-  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  // ✅ IMPORTANT: turn this OFF or you will "auto-login" forever
-  const DEV_MODE = false;
+  const cleanEmail = useMemo(() => email.trim(), [email]);
 
-  // ---- Google OAuth IDs (from Expo root .env) ----
+  // Google client ids (optional)
   const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || "";
   const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "";
 
@@ -45,51 +44,16 @@ export default function Login() {
       webClientId: webClientId || undefined,
     });
 
-  // ✅ If already logged in, jump straight to tabs
-  useEffect(() => {
-    let mounted = true;
-
-    (async () => {
-      try {
-        if (DEV_MODE) return; // don't auto-redirect in dev bypass mode
-
-        const token = await auth.getToken();
-        if (!mounted) return;
-
-        if (token && typeof token === "string" && token.length >= 10) {
-          router.replace("/(tabs)/Dashboard");
-        }
-      } catch (error) {
-        console.error("Auth check error:", error);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [router]);
-
-  // ✅ Clears saved session then goes to Register
-  const startNewAccount = async () => {
-    try {
-      setLoading(true);
-      await auth.clear(); // you DO have this
-    } catch (e) {
-      console.warn("Failed to clear auth session:", e);
-    } finally {
-      setLoading(false);
-      router.replace("/(auth)/register");
-    }
-  };
-
+  // ✅ Always clickable: validate on press
   const handleLogin = async () => {
-    const cleanEmail = email.trim();
+    if (loading) return;
 
     if (!cleanEmail || !password) {
       Alert.alert("Missing Information", "Please enter both email and password.");
       return;
     }
 
+    // basic email format check (helps avoid dumb typos)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(cleanEmail)) {
       Alert.alert("Invalid Email", "Please enter a valid email address.");
@@ -98,29 +62,31 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const result = await auth.login(cleanEmail, password);
-      if (result?.token) {
-        router.replace("/(tabs)/Dashboard");
-      } else {
-        Alert.alert("Login Failed", "No token returned from server.");
-      }
-    } catch (error: any) {
-      console.error("Login error:", error);
-      const errorMessage =
-        error?.message || "Unable to sign in. Please check your credentials and try again.";
+      console.log("API_BASE:", API_BASE);
 
-      Alert.alert("Login Failed", errorMessage, [
-        { text: "OK", style: "default" },
-        ...(String(errorMessage).toLowerCase().includes("connect")
+      const result = await auth.login(cleanEmail, password);
+
+      if (!result?.token) {
+        Alert.alert("Login Failed", "No token returned from server.");
+        return;
+      }
+
+      // ✅ go into tabs group (tabs guard will handle token validity)
+      router.replace("/(tabs)");
+    } catch (error: any) {
+      const msg = error?.message ?? "Invalid credentials.";
+      Alert.alert("Login Failed", msg, [
+        { text: "OK" },
+        ...(String(msg).toLowerCase().includes("connect") ||
+        String(msg).toLowerCase().includes("timeout")
           ? [
               {
-                text: "Check Server",
-                onPress: () => {
+                text: "Server Help",
+                onPress: () =>
                   Alert.alert(
                     "Server Connection",
-                    `Make sure your server is running at:\n\n${API_BASE}\n\nAnd your device is on the same network.`
-                  );
-                },
+                    `Make sure your server is running at:\n\n${API_BASE}\n\nSame Wi-Fi on phone + laptop.`
+                  ),
               },
             ]
           : []),
@@ -131,6 +97,8 @@ export default function Login() {
   };
 
   const handleGoogleLogin = async (idToken: string) => {
+    if (loading) return;
+
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/auth/google`, {
@@ -141,34 +109,27 @@ export default function Login() {
 
       const data = await res.json().catch(() => ({}));
 
-      if (!res.ok) {
-        throw new Error(data?.error || data?.message || "Google sign-in failed.");
-      }
+      if (!res.ok) throw new Error(data?.error || data?.message || "Google sign-in failed.");
+      if (!data?.token) throw new Error("No token returned from server.");
 
-      if (!data?.token) {
-        throw new Error("No token returned from server.");
-      }
+      await auth.saveToken(data.token);
+      if (data?.user?.email) await auth.saveUserEmail(data.user.email);
 
-      Alert.alert("Welcome!", "Signed in with Google successfully.", [
-        { text: "Continue", onPress: () => router.replace("/(tabs)/Dashboard") },
-      ]);
-    } catch (error: any) {
-      console.error("Google login error:", error);
-      Alert.alert("Google Sign-In Failed", error?.message || "Please try again.");
+      router.replace("/(tabs)");
+    } catch (e: any) {
+      Alert.alert("Google Sign-In Failed", e?.message ?? "Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle Google response
   useEffect(() => {
     if (!googleResponse) return;
     if (googleResponse.type !== "success") return;
 
-    const idToken = googleResponse.params?.id_token;
-
+    const idToken = (googleResponse as any).params?.id_token;
     if (!idToken) {
-      Alert.alert("Google Sign-In Failed", "No ID token was returned.");
+      Alert.alert("Google Sign-In Failed", "No ID token returned.");
       return;
     }
 
@@ -177,10 +138,12 @@ export default function Login() {
   }, [googleResponse]);
 
   const onPressGoogle = async () => {
-    if (!iosClientId || !webClientId) {
+    if (loading) return;
+
+    if (!iosClientId && !webClientId) {
       Alert.alert(
         "Google Sign-In Not Configured",
-        "Missing EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID or EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in your Expo .env. Restart Expo after adding them."
+        "Add EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID and/or EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to your Expo .env, then restart Expo with -c."
       );
       return;
     }
@@ -188,13 +151,30 @@ export default function Login() {
     try {
       await promptGoogle({ useProxy: true } as any);
     } catch (e: any) {
-      Alert.alert("Google Sign-In Failed", e?.message || "Please try again.");
+      Alert.alert("Google Sign-In Failed", e?.message ?? "Please try again.");
     }
   };
 
+  const goRegister = () => {
+    if (loading) return;
+    router.push("/(auth)/register");
+  };
+
+  const clearSession = async () => {
+    if (loading) return;
+    await auth.logout();
+    Alert.alert("Cleared", "Saved token cleared. Now sign in again.");
+  };
+
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.header}>
           <Text style={styles.title}>SavvyTrack</Text>
           <Text style={styles.subtitle}>Sign in to continue</Text>
@@ -208,8 +188,8 @@ export default function Login() {
               placeholder="Enter your email"
               placeholderTextColor={Colors.neutral.mutedGray}
               autoCapitalize="none"
-              autoComplete="email"
               keyboardType="email-address"
+              autoComplete="email"
               value={email}
               onChangeText={setEmail}
               editable={!loading}
@@ -230,22 +210,37 @@ export default function Login() {
                 onChangeText={setPassword}
                 editable={!loading}
               />
-              <Pressable style={styles.eyeIcon} onPress={() => setShowPassword((v) => !v)}>
-                <FontAwesome name={showPassword ? "eye-slash" : "eye"} size={20} color={Colors.neutral.mutedGray} />
+              <Pressable
+                style={styles.eyeIcon}
+                onPress={() => setShowPassword((v) => !v)}
+                disabled={loading}
+              >
+                <FontAwesome
+                  name={showPassword ? "eye-slash" : "eye"}
+                  size={20}
+                  color={Colors.neutral.mutedGray}
+                />
               </Pressable>
             </View>
           </View>
 
-          <Pressable style={[styles.primaryButton, loading && styles.buttonDisabled]} onPress={handleLogin} disabled={loading}>
-            {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Sign In</Text>}
+          {/* ✅ SIGN IN */}
+          <Pressable style={styles.primaryButton} onPress={handleLogin} disabled={loading}>
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Sign In</Text>
+            )}
           </Pressable>
 
+          {/* Divider */}
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>OR</Text>
             <View style={styles.dividerLine} />
           </View>
 
+          {/* ✅ GOOGLE */}
           <Pressable
             style={[styles.oauthButton, (loading || !googleRequest) && styles.buttonDisabled]}
             onPress={onPressGoogle}
@@ -255,13 +250,21 @@ export default function Login() {
             <Text style={styles.oauthButtonText}>Continue with Google</Text>
           </Pressable>
 
-          {/* ✅ Correct Sign Up route */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Don&apos;t have an account? </Text>
-            <Pressable onPress={startNewAccount} disabled={loading}>
-              <Text style={styles.footerLink}>Sign Up</Text>
-            </Pressable>
-          </View>
+          {/* ✅ CREATE ACCOUNT */}
+          <Pressable
+            style={[styles.secondaryButton, loading && styles.buttonDisabled]}
+            onPress={goRegister}
+            disabled={loading}
+          >
+            <Text style={styles.secondaryButtonText}>Create New Account</Text>
+          </Pressable>
+
+          {/* Optional helper */}
+          <Pressable onPress={clearSession} disabled={loading} style={{ marginTop: 6 }}>
+            <Text style={styles.clearText}>Clear saved session</Text>
+          </Pressable>
+
+          <Text style={styles.hint}>Server: {API_BASE}</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -271,12 +274,14 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.neutral.backgroundLight },
   scrollContent: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  header: { alignItems: "center", marginBottom: 40 },
-  title: { fontSize: 36, fontWeight: "800", color: Colors.neutral.textDark, marginBottom: 8 },
+  header: { alignItems: "center", marginBottom: 32 },
+  title: { fontSize: 36, fontWeight: "800", color: Colors.neutral.textDark, marginBottom: 6 },
   subtitle: { fontSize: 16, color: Colors.neutral.mutedGray },
-  form: { gap: 20 },
+
+  form: { gap: 14 },
   inputContainer: { gap: 8 },
   label: { fontSize: 14, fontWeight: "600", color: Colors.neutral.textDark },
+
   input: {
     backgroundColor: Colors.neutral.cardSurface,
     borderWidth: 1,
@@ -296,12 +301,20 @@ const styles = StyleSheet.create({
   },
   passwordInput: { flex: 1, padding: 16, fontSize: 16, color: Colors.neutral.textDark },
   eyeIcon: { padding: 16 },
-  primaryButton: { backgroundColor: Colors.primary.green, padding: 16, borderRadius: 12, alignItems: "center", marginTop: 8 },
-  buttonDisabled: { opacity: 0.6 },
+
+  primaryButton: {
+    backgroundColor: Colors.primary.green,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    marginTop: 6,
+  },
   primaryButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
-  divider: { flexDirection: "row", alignItems: "center", marginVertical: 8 },
+
+  divider: { flexDirection: "row", alignItems: "center", marginVertical: 6 },
   dividerLine: { flex: 1, height: 1, backgroundColor: "#E0E0E0" },
   dividerText: { marginHorizontal: 16, fontSize: 14, color: Colors.neutral.mutedGray, fontWeight: "500" },
+
   oauthButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -314,7 +327,23 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   oauthButtonText: { color: Colors.neutral.textDark, fontSize: 16, fontWeight: "600" },
-  footer: { flexDirection: "row", justifyContent: "center", marginTop: 8 },
-  footerText: { fontSize: 14, color: Colors.neutral.mutedGray },
-  footerLink: { fontSize: 14, color: Colors.primary.green, fontWeight: "600" },
+
+  secondaryButton: {
+    borderWidth: 2,
+    borderColor: Colors.primary.green,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  secondaryButtonText: { color: Colors.primary.green, fontSize: 15, fontWeight: "700" },
+
+  buttonDisabled: { opacity: 0.45 },
+
+  clearText: {
+    textAlign: "center",
+    color: Colors.primary.green,
+    fontWeight: "700",
+  },
+
+  hint: { textAlign: "center", marginTop: 10, color: Colors.neutral.mutedGray, fontSize: 12 },
 });

@@ -1,13 +1,3 @@
-import { API_BASE } from "@/constants/api";
-import { analyzeFood } from "@/lib/allergenChecker";
-import { auth } from "@/lib/auth";
-import { preferences } from "@/lib/preferences";
-import { Symptom, symptoms } from "@/lib/symptoms";
-import AllergenWarning from "@/components/AllergenWarning";
-import NutritionInsights from "@/components/NutritionInsights";
-import { Colors } from "@/constants/Colors";
-import { FontAwesome } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -19,11 +9,23 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { FontAwesome } from "@expo/vector-icons";
+import { useFocusEffect, useRouter } from "expo-router";
+
+import { API_BASE } from "@/constants/api";
+import { Colors } from "@/constants/Colors";
+import { analyzeFood } from "@/lib/allergenChecker";
+import { auth } from "@/lib/auth";
+import { preferences } from "@/lib/preferences";
+import { Symptom, symptoms } from "@/lib/symptoms";
+import AllergenWarning from "@/components/AllergenWarning";
+import NutritionInsights from "@/components/NutritionInsights";
 
 interface Meal {
   id: string;
   mealType: string;
-  occurredAt: string;
+  occurredAt?: string;
+  dateTime?: string;
   items: Array<{
     food: {
       id: string;
@@ -47,88 +49,80 @@ interface AlertItem {
   };
 }
 
+async function readErrorText(res: Response) {
+  return await res.text().catch(() => "");
+}
+
 export default function DashboardScreen() {
   const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
   const [todayMeals, setTodayMeals] = useState<Meal[]>([]);
   const [todaySymptoms, setTodaySymptoms] = useState<Symptom[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
 
-  // check authentication on mount
-  useEffect(() => {
-    const checkAuthAndLoad = async () => {
-      try {
-        const isAuth = await auth.isAuthenticated();
-        if (!isAuth) {
-          router.replace("/");
-          return;
-        }
-        await loadDashboardData();
-      } catch (e) {
-        console.error("Auth check error:", e);
-        router.replace("/");
-      }
-    };
+  const kickToLogin = useCallback(async () => {
+    await auth.clear(); // clears bad/expired token
+    router.replace("/(auth)"); // ✅ never "/" here
+  }, [router]);
 
-    checkAuthAndLoad();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // refresh symptoms when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      loadTodaySymptoms();
-    }, [])
-  );
-
-  const loadDashboardData = async () => {
-    setLoading(true);
-    await Promise.all([loadTodayMeals(), loadTodaySymptoms()]);
-    setLoading(false);
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadDashboardData();
-    setRefreshing(false);
-  };
-
-  const loadTodayMeals = async () => {
+  const loadTodayMeals = useCallback(async () => {
     try {
       const token = await auth.getToken();
-      if (!token) return;
+      if (!token) {
+        await kickToLogin();
+        return;
+      }
 
       const today = new Date().toISOString().split("T")[0];
 
-      const response = await fetch(`${API_BASE}/meals?date=${today}`, {
+      const response = await fetch(`${API_BASE}/api/meals?date=${today}`, {
+        method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
+          Accept: "application/json",
         },
       });
 
       if (response.ok) {
-        const meals = await response.json();
+        const meals: Meal[] = await response.json();
         setTodayMeals(meals);
         await checkAlerts(meals);
-      } else {
-        console.warn("Meals fetch failed:", response.status);
+        return;
       }
+
+      // ✅ If token is bad, logout & go to login
+      if (response.status === 401) {
+        console.warn("Meals fetch 401 → logging out");
+        await kickToLogin();
+        return;
+      }
+
+      const body = await readErrorText(response);
+      console.warn("Meals fetch failed:", response.status, body);
     } catch (error) {
       console.error("Failed to load meals:", error);
     }
-  };
+  }, [kickToLogin]);
+
+  const loadTodaySymptoms = useCallback(async () => {
+    try {
+      const symptomsList = await symptoms.getTodaySymptoms();
+      setTodaySymptoms(symptomsList);
+    } catch (error) {
+      console.error("Failed to load symptoms:", error);
+    }
+  }, []);
 
   const checkAlerts = async (meals: Meal[]) => {
     const userPrefs = await preferences.fetch();
     const alertsList: AlertItem[] = [];
 
     for (const meal of meals) {
-      // collect all food names for this meal
-      // ✅ ensure we pass clean strings (no trim errors)
-      const foodNames = meal.items
-        .map((item) => (item?.food?.name ?? "").toString())
-        .map((n) => n.trim())
+      const foodNames = (meal.items || [])
+        .map((item) => (item?.food?.name ?? "").toString().trim())
         .filter(Boolean);
 
       const analysis = await analyzeFood(foodNames, userPrefs);
@@ -141,13 +135,37 @@ export default function DashboardScreen() {
     setAlerts(alertsList);
   };
 
-  const loadTodaySymptoms = async () => {
-    try {
-      const symptomsList = await symptoms.getTodaySymptoms();
-      setTodaySymptoms(symptomsList);
-    } catch (error) {
-      console.error("Failed to load symptoms:", error);
-    }
+  const loadDashboardData = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([loadTodayMeals(), loadTodaySymptoms()]);
+    setLoading(false);
+  }, [loadTodayMeals, loadTodaySymptoms]);
+
+  // ✅ First mount
+  useEffect(() => {
+    (async () => {
+      const isAuth = await auth.isAuthenticated();
+      if (!isAuth) {
+        await kickToLogin();
+        return;
+      }
+      await loadDashboardData();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ✅ IMPORTANT: refresh every time you return to Dashboard
+  useFocusEffect(
+  useCallback(() => {
+    loadTodayMeals();
+    loadTodaySymptoms();
+  }, [])
+);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadDashboardData();
+    setRefreshing(false);
   };
 
   const handleRemoveSymptom = async (symptomId: string) => {
@@ -175,7 +193,10 @@ export default function DashboardScreen() {
     return safe.charAt(0).toUpperCase() + safe.slice(1);
   };
 
-  const formatTime = (dateString: string) => {
+  const getMealTimeField = (meal: Meal) => meal.occurredAt ?? meal.dateTime ?? "";
+
+  const formatTime = (dateString?: string) => {
+    if (!dateString) return "";
     const date = new Date(dateString);
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
@@ -214,6 +235,7 @@ export default function DashboardScreen() {
           </Text>
           <Text style={styles.date}>{getTodayDate()}</Text>
         </View>
+
         <TouchableOpacity
           style={styles.profileButton}
           onPress={() => router.push("/(tabs)/Profile")}
@@ -297,7 +319,7 @@ export default function DashboardScreen() {
                     />
                     <Text style={styles.alertMealType}>
                       {getMealTypeLabel(alert.meal.mealType)} •{" "}
-                      {formatTime(alert.meal.occurredAt)}
+                      {formatTime(getMealTimeField(alert.meal))}
                     </Text>
                   </View>
                   <Text style={styles.alertMealItems} numberOfLines={2}>
@@ -348,14 +370,16 @@ export default function DashboardScreen() {
                     />
                     <Text style={styles.mealType}>{getMealTypeLabel(meal.mealType)}</Text>
                   </View>
-                  <Text style={styles.mealTime}>{formatTime(meal.occurredAt)}</Text>
+                  <Text style={styles.mealTime}>
+                    {formatTime(getMealTimeField(meal))}
+                  </Text>
                 </View>
 
                 <View style={styles.mealItems}>
                   {meal.items.map((item) => (
                     <View key={item.food.id} style={styles.mealItem}>
                       <Text style={styles.mealItemName}>{item.food.name}</Text>
-                      {item.food.kcal && (
+                      {item.food.kcal != null && (
                         <Text style={styles.mealItemKcal}>{item.food.kcal} kcal</Text>
                       )}
                     </View>
@@ -393,6 +417,7 @@ export default function DashboardScreen() {
                   style={[styles.symptomChip, { marginRight: 8, marginBottom: 8 }]}
                 >
                   <Text style={styles.symptomName}>{symptom.name}</Text>
+
                   <View
                     style={[
                       styles.severityBadge,
@@ -403,6 +428,7 @@ export default function DashboardScreen() {
                   >
                     <Text style={styles.severityText}>{symptom.severity}</Text>
                   </View>
+
                   <TouchableOpacity
                     onPress={() => handleRemoveSymptom(symptom.id)}
                     style={styles.removeSymptomButton}
@@ -417,7 +443,7 @@ export default function DashboardScreen() {
 
           <TouchableOpacity
             style={styles.addSymptomButton}
-            onPress={() => router.push("/symptom")}
+            onPress={() => router.push("./symptom")}
             activeOpacity={0.8}
           >
             <FontAwesome
@@ -430,7 +456,6 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Nutrition Insights */}
         <NutritionInsights />
 
         {/* Summary Stats */}
@@ -462,6 +487,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.neutral.backgroundLight,
   },
   loadingText: { marginTop: 12, fontSize: 16, color: Colors.neutral.mutedGray },
+
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -476,11 +502,14 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 24, fontWeight: "800", color: Colors.neutral.textDark, marginBottom: 4 },
   date: { fontSize: 14, color: Colors.neutral.mutedGray, fontWeight: "500" },
   profileButton: { padding: 8 },
+
   scrollView: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 40 },
+
   section: { marginBottom: 24 },
   sectionHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   sectionTitle: { fontSize: 20, fontWeight: "700", color: Colors.neutral.textDark, flex: 1 },
+
   mealCount: {
     fontSize: 16,
     fontWeight: "600",
@@ -490,6 +519,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
+
   actionsRow: { flexDirection: "row" },
   actionButton: {
     flex: 1,
@@ -512,6 +542,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   actionButtonText: { fontSize: 14, fontWeight: "600", color: Colors.neutral.textDark },
+
   alertWrapper: { marginBottom: 16 },
   alertMealInfo: {
     backgroundColor: Colors.neutral.cardSurface,
@@ -522,14 +553,9 @@ const styles = StyleSheet.create({
     borderColor: "#F0F0F0",
   },
   alertMealHeader: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
-  alertMealType: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
-    marginLeft: 8,
-    flex: 1,
-  },
+  alertMealType: { fontSize: 14, fontWeight: "700", color: Colors.neutral.textDark, marginLeft: 8, flex: 1 },
   alertMealItems: { fontSize: 13, color: Colors.neutral.mutedGray, lineHeight: 18 },
+
   alertCountBadge: {
     backgroundColor: Colors.primary.orange,
     borderRadius: 12,
@@ -539,6 +565,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   alertCountText: { fontSize: 12, fontWeight: "700", color: "#FFFFFF" },
+
   mealCard: {
     backgroundColor: Colors.neutral.cardSurface,
     borderRadius: 16,
@@ -554,7 +581,9 @@ const styles = StyleSheet.create({
   mealTypeContainer: { flexDirection: "row", alignItems: "center" },
   mealType: { fontSize: 16, fontWeight: "700", color: Colors.neutral.textDark },
   mealTime: { fontSize: 14, color: Colors.neutral.mutedGray, fontWeight: "500" },
-  mealItems: {},
+
+  mealItems: { marginTop: 4 },
+
   mealItem: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -565,6 +594,7 @@ const styles = StyleSheet.create({
   },
   mealItemName: { fontSize: 15, fontWeight: "500", color: Colors.neutral.textDark, flex: 1 },
   mealItemKcal: { fontSize: 13, color: Colors.neutral.mutedGray, fontWeight: "600" },
+
   symptomsContainer: { flexDirection: "row", flexWrap: "wrap", marginBottom: 12 },
   symptomChip: {
     flexDirection: "row",
@@ -577,16 +607,13 @@ const styles = StyleSheet.create({
     borderColor: "#E0E0E0",
   },
   symptomName: { fontSize: 14, fontWeight: "600", color: Colors.neutral.textDark, marginRight: 8 },
+
   severityBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   severityMild: { backgroundColor: `${Colors.primary.yellow}30` },
   severityModerate: { backgroundColor: `${Colors.primary.orange}30` },
   severitySevere: { backgroundColor: `${Colors.primary.orange}50` },
-  severityText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.neutral.textDark,
-    textTransform: "uppercase",
-  },
+  severityText: { fontSize: 11, fontWeight: "700", color: Colors.neutral.textDark, textTransform: "uppercase" },
+
   addSymptomButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -600,6 +627,7 @@ const styles = StyleSheet.create({
   },
   addSymptomText: { fontSize: 14, fontWeight: "600", color: Colors.primary.green },
   removeSymptomButton: { marginLeft: 8, padding: 4 },
+
   emptyCard: {
     backgroundColor: Colors.neutral.cardSurface,
     borderRadius: 16,
@@ -613,6 +641,7 @@ const styles = StyleSheet.create({
   emptySubtext: { fontSize: 13, color: Colors.neutral.mutedGray },
   emptyButton: { marginTop: 16, backgroundColor: Colors.primary.green, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
   emptyButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
+
   statsContainer: { flexDirection: "row", marginTop: 8 },
   statCard: {
     flex: 1,
@@ -628,11 +657,5 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
   },
   statValue: { fontSize: 32, fontWeight: "800", color: Colors.primary.green, marginBottom: 4 },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Colors.neutral.mutedGray,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
+  statLabel: { fontSize: 12, fontWeight: "600", color: Colors.neutral.mutedGray, textTransform: "uppercase", letterSpacing: 0.5 },
 });
