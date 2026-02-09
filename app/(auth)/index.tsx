@@ -35,16 +35,21 @@ export default function AuthIndexLogin() {
   const cleanEmail = useMemo(() => email.trim(), [email]);
 
   // Google client ids (optional)
-  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || "";
-  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "";
+  // Google client ids (optional)
+const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
-  const [googleRequest, googleResponse, promptGoogle] =
-    Google.useIdTokenAuthRequest({
-      iosClientId: iosClientId || undefined,
-      webClientId: webClientId || undefined,
-    });
+const googleEnabled = !!iosClientId;
 
-  // ✅ Always clickable: validate on press
+// ONLY initialize Google auth if iosClientId exists
+const [googleRequest, googleResponse, promptGoogle] = googleEnabled
+  ? Google.useIdTokenAuthRequest({
+      iosClientId,
+      webClientId,
+    })
+  : [null, null, () => {}];
+
+  //  Always clickable: validate on press
   const handleLogin = async () => {
     if (loading) return;
 
@@ -71,7 +76,7 @@ export default function AuthIndexLogin() {
         return;
       }
 
-      // ✅ go into tabs group (tabs guard will handle token validity)
+      //  go into tabs group (tabs guard will handle token validity)
       router.replace("/(tabs)");
     } catch (error: any) {
       const msg = error?.message ?? "Invalid credentials.";
@@ -240,7 +245,7 @@ export default function AuthIndexLogin() {
             <View style={styles.dividerLine} />
           </View>
 
-          {/* ✅ GOOGLE */}
+          {/* GOOGLE */}
           <Pressable
             style={[styles.oauthButton, (loading || !googleRequest) && styles.buttonDisabled]}
             onPress={onPressGoogle}
@@ -250,7 +255,7 @@ export default function AuthIndexLogin() {
             <Text style={styles.oauthButtonText}>Continue with Google</Text>
           </Pressable>
 
-          {/* ✅ CREATE ACCOUNT */}
+          {/*  CREATE ACCOUNT */}
           <Pressable
             style={[styles.secondaryButton, loading && styles.buttonDisabled]}
             onPress={goRegister}
