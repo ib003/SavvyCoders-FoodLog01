@@ -9,6 +9,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const OpenAI = require("openai");
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const FDC_API_KEY = process.env.FDC_API_KEY;
 
 // Initialize Google OAuth client
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -413,7 +414,82 @@ app.post("/auth/apple", async (req, res) => {
 
 // --- Foods & barcode ---
 app.get("/foods", async (req, res) => {
-  const q = req.query.q || "";
+  const q = String(req.query.q || "").trim();
+  if (!q) return res.json([]);
+
+  //If a real FDC_API_KEY is set in .env, search USDA FoodData Central (real nutrition DB)
+  if (FDC_API_KEY) {
+    try {
+      const url =
+        "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" +
+        encodeURIComponent(FDC_API_KEY);
+
+      const fdcResp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q, pageSize: 25, pageNumber: 1 }),
+      });
+
+      if (!fdcResp.ok) {
+        const txt = await fdcResp.text();
+        console.error("[/foods] FDC error:", fdcResp.status, txt.slice(0, 300));
+        return res.status(502).json([]);
+      }
+
+      const payload = await fdcResp.json();
+      const list = Array.isArray(payload.foods) ? payload.foods : [];
+
+      const candidates = list
+        .map((f) => {
+          const nutrients = Array.isArray(f.foodNutrients) ? f.foodNutrients : [];
+          const energy = nutrients.find((n) =>
+            String(n?.nutrientName || "").toLowerCase().includes("energy")
+          );
+
+          let calories = (energy && typeof energy.value === "number") ? energy.value : null;
+          const unit = String(energy?.unitName || "").toUpperCase();
+          if (typeof calories === "number" && unit === "KJ") calories = calories / 4.184; // kJ -> kcal
+
+          return {
+            //exactly like the model Food fields
+            name: String(f.description || ""),
+            brand: f.brandOwner || f.brandName || null,
+            description: null,
+            servingSize: (typeof f.servingSize === "number") ? f.servingSize : null,
+            servingUnit: f.servingSizeUnit ? String(f.servingSizeUnit) : "g",
+            calories: (typeof calories === "number") ? Math.round(calories) : null,
+            barcode: null,
+            imageUrl: null,
+            source: "FDC_API",
+            externalId: f.fdcId ? String(f.fdcId) : null,
+          };
+        })
+        .filter((x) => x.name);
+
+      //Cache to DB so later /meals can reference a real Food id
+      //If DB is down, we still return the external results
+      try {
+        const saved = [];
+        for (const c of candidates) {
+          if (!c.externalId) continue;
+          let existing = await prisma.food.findFirst({
+            where: { source: "FDC_API", externalId: c.externalId },
+          });
+          if (!existing) existing = await prisma.food.create({ data: c });
+          saved.push(existing);
+        }
+        return res.json(saved.length ? saved : candidates);
+      } catch (dbErr) {
+        console.error("[/foods] DB cache failed, returning external results:", dbErr?.message || dbErr);
+        return res.json(candidates);
+      }
+    } catch (err) {
+      console.error("[/foods] External search failed:", err);
+      return res.status(502).json([]);
+    }
+  }
+
+  //Fallback: local DB search
   const foods = await prisma.food.findMany({
     where: { name: { contains: q, mode: "insensitive" } },
     take: 25,
