@@ -282,6 +282,8 @@ export default function AddSearch() {
             idx; //idx suffix guarantees uniqueness even if ids repeat
 
           const kcalVal = getFoodKcal(food);
+          const servingQty = Number(food.servingQty);
+          const servingUnit = String(food.servingUnit ?? "").trim();
 
           return (
             <TouchableOpacity
@@ -294,7 +296,13 @@ export default function AddSearch() {
                 <View style={styles.foodInfo}>
                   <Text style={styles.foodName}>{food.name}</Text>
                   {!!food.brand && <Text style={styles.foodBrand}>{food.brand}</Text>}
-                  <Text style={styles.foodServing}>1 serving (100 g)</Text>
+                  {servingUnit ? (
+                    <Text style={styles.foodServing}>
+                      {Number.isFinite(servingQty) && servingQty > 0 ? servingQty : 1} {servingUnit}
+                    </Text>
+                  ) : (
+                    <Text style={styles.foodServing}>1 serving</Text>
+                  )}
                 </View>
 
                 {kcalVal > 0 && (

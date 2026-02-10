@@ -147,6 +147,41 @@ export default function DashboardScreen() {
     }
   };
 
+  const handleDeleteMeal = async (mealId: string) => {
+    Alert.alert(
+      "Delete Meal",
+      "Are you sure you want to delete this meal?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await auth.getToken();
+              if (!token) return;
+
+              const response = await fetch(`${API_BASE}/meals/${mealId}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+
+              if (!response.ok) {
+                throw new Error("Failed to delete meal");
+              }
+
+              setTodayMeals((prev) => prev.filter((m) => m.id !== mealId));
+              setAlerts((prev) => prev.filter((a) => a.meal.id !== mealId));
+            } catch (error) {
+              console.error("Failed to delete meal:", error);
+              Alert.alert("Error", "Failed to delete meal");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const getMealTypeIcon = (mealType: string) => {
     const type = mealType.toLowerCase();
     if (type.includes("breakfast")) return "coffee";
@@ -346,7 +381,16 @@ export default function DashboardScreen() {
                     />
                     <Text style={styles.mealType}>{getMealTypeLabel(meal.mealType)}</Text>
                   </View>
-                  <Text style={styles.mealTime}>{formatTime(meal.occurredAt)}</Text>
+                  <View style={styles.mealHeaderActions}>
+                    <Text style={styles.mealTime}>{formatTime(meal.occurredAt)}</Text>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteMeal(meal.id)}
+                      style={styles.deleteMealButton}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <FontAwesome name="trash" size={14} color={Theme.colors.text.tertiary} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 <View style={styles.mealItems}>
@@ -601,6 +645,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: Theme.spacing.md,
+  },
+  mealHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Theme.spacing.sm,
+  },
+  deleteMealButton: {
+    padding: Theme.spacing.xs,
   },
   mealTypeContainer: {
     flexDirection: "row",
