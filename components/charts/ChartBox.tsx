@@ -36,6 +36,14 @@ export function ChartBox({
       ? Math.max(...points.map((p) => (p.value < 0 ? 0 : p.value)), 1)
       : 1;
 
+  const summary = React.useMemo(() => {
+    if (points.length === 0) return { total: 0, avg: 0 };
+    const normalized = points.map((p) => (p.value < 0 ? 0 : p.value));
+    const total = normalized.reduce((acc, v) => acc + v, 0);
+    const avg = total / normalized.length;
+    return { total, avg };
+  }, [points]);
+
   return (
     <Card style={[styles.container, style]} padding="lg" variant="elevated">
       <View style={styles.header}>
@@ -62,26 +70,48 @@ export function ChartBox({
         ) : !hasData ? (
           <Text style={styles.emptyText}>{emptyText}</Text>
         ) : (
-          <View style={styles.chartWrapper}>
-            {points.map((item) => {
-              const normalizedValue = item.value < 0 ? 0 : item.value;
-              const heightRatio = normalizedValue / maxValue;
-              const barHeight = 120 * heightRatio + 4; // keep a minimum sliver
+          <View>
+            <View style={styles.chartWrapper}>
+              {points.map((item) => {
+                const normalizedValue = item.value < 0 ? 0 : item.value;
+                const heightRatio = normalizedValue / maxValue;
+                const barHeight = 120 * heightRatio + 4; // keep a minimum sliver
 
-              return (
-                <View key={item.label} style={styles.barGroup}>
-                  <Text style={styles.barValue}>
-                    {formatValue(normalizedValue)}
-                  </Text>
-                  <View style={styles.barOuter}>
-                    <View style={[styles.barInner, { height: barHeight }]} />
+                return (
+                  <View key={item.label} style={styles.barGroup}>
+                    <Text style={styles.barValue}>
+                      {formatValue(normalizedValue)}
+                    </Text>
+                    <View style={styles.barOuter}>
+                      <View style={[styles.barInner, { height: barHeight }]} />
+                    </View>
+                    <Text style={styles.barLabel} numberOfLines={1}>
+                      {item.label}
+                    </Text>
                   </View>
-                  <Text style={styles.barLabel} numberOfLines={1}>
-                    {item.label}
-                  </Text>
-                </View>
-              );
-            })}
+                );
+              })}
+            </View>
+
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Total</Text>
+                <Text style={styles.summaryValue} numberOfLines={1}>
+                  {formatValue(summary.total)}
+                  {unit ? ` ${unit}` : ""}
+                </Text>
+              </View>
+
+              <View style={styles.summaryDivider} />
+
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Avg</Text>
+                <Text style={styles.summaryValue} numberOfLines={1}>
+                  {formatValue(summary.avg)}
+                  {unit ? ` ${unit}` : ""}
+                </Text>
+              </View>
+            </View>
           </View>
         )}
       </View>
@@ -168,6 +198,34 @@ const styles = StyleSheet.create({
   barLabel: {
     ...Theme.typography.captionSmall,
     color: Theme.colors.text.secondary,
+    marginTop: Theme.spacing.xs,
+  },
+  summaryRow: {
+    marginTop: Theme.spacing.md,
+    paddingTop: Theme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Theme.colors.border.light,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  summaryItem: {
+    flex: 1,
+    minWidth: 0,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: Theme.colors.border.light,
+    marginHorizontal: Theme.spacing.md,
+  },
+  summaryLabel: {
+    ...Theme.typography.captionSmall,
+    color: Theme.colors.text.tertiary,
+  },
+  summaryValue: {
+    ...Theme.typography.bodySmall,
+    color: Theme.colors.text.primary,
+    fontWeight: "600",
     marginTop: Theme.spacing.xs,
   },
 });
