@@ -12,7 +12,17 @@ import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Animated, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+    ActivityIndicator,
+    Alert,
+    Animated,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
 interface Meal {
   id: string;
@@ -59,7 +69,7 @@ export default function DashboardScreen() {
   useEffect(() => {
     const checkAuthAndLoad = async () => {
       const token = await auth.getToken();
-      if (!token || typeof token !== 'string' || token.length < 20) {
+      if (!token || typeof token !== "string" || token.length < 20) {
         console.log("[Dashboard] No valid token, redirecting to login");
         router.replace("/");
         return;
@@ -72,7 +82,7 @@ export default function DashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       loadTodaySymptoms();
-    }, [])
+    }, []),
   );
 
   const loadDashboardData = async () => {
@@ -114,9 +124,9 @@ export default function DashboardScreen() {
     const alertsList: AlertItem[] = [];
 
     for (const meal of meals) {
-      const foodNames = meal.items.map(item => item.food.name);
+      const foodNames = meal.items.map((item) => item.food.name);
       const analysis = await analyzeFood(foodNames, userPrefs);
-      
+
       if (analysis.hasAllergenWarning || analysis.hasDietaryConflict) {
         alertsList.push({
           meal,
@@ -187,7 +197,10 @@ export default function DashboardScreen() {
     <View style={styles.container}>
       {/* Header with Gradient */}
       <LinearGradient
-        colors={[Theme.colors.background.gradient[0], Theme.colors.background.gradient[1]]}
+        colors={[
+          Theme.colors.background.gradient[0],
+          Theme.colors.background.gradient[1],
+        ]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.headerGradient}
@@ -195,7 +208,13 @@ export default function DashboardScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>
-              Good {new Date().getHours() < 12 ? "Morning" : new Date().getHours() < 18 ? "Afternoon" : "Evening"}!
+              Good{" "}
+              {new Date().getHours() < 12
+                ? "Morning"
+                : new Date().getHours() < 18
+                  ? "Afternoon"
+                  : "Evening"}
+              !
             </Text>
             <Text style={styles.date}>{getTodayDate()}</Text>
           </View>
@@ -204,7 +223,11 @@ export default function DashboardScreen() {
             onPress={() => router.push("/(tabs)/Profile")}
           >
             <View style={styles.profileIconContainer}>
-              <FontAwesome name="user-circle" size={28} color={Theme.colors.primary.main} />
+              <FontAwesome
+                name="user-circle"
+                size={28}
+                color={Theme.colors.primary.main}
+              />
             </View>
           </TouchableOpacity>
         </View>
@@ -214,10 +237,10 @@ export default function DashboardScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh} 
-            tintColor={Theme.colors.primary.main} 
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Theme.colors.primary.main}
           />
         }
         showsVerticalScrollIndicator={false}
@@ -232,7 +255,10 @@ export default function DashboardScreen() {
               activeOpacity={0.8}
             >
               <LinearGradient
-                colors={[Theme.colors.primary.gradient[0], Theme.colors.primary.gradient[1]]}
+                colors={[
+                  Theme.colors.primary.gradient[0],
+                  Theme.colors.primary.gradient[1],
+                ]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.actionIconContainer}
@@ -247,10 +273,39 @@ export default function DashboardScreen() {
               onPress={() => router.push("/(tabs)/AllergiesPreferences")}
               activeOpacity={0.8}
             >
-              <View style={[styles.actionIconContainer, { backgroundColor: `${Theme.colors.accent.orange}20` }]}>
-                <FontAwesome name="exclamation-triangle" size={24} color={Theme.colors.accent.orange} />
+              <View
+                style={[
+                  styles.actionIconContainer,
+                  { backgroundColor: `${Theme.colors.accent.orange}20` },
+                ]}
+              >
+                <FontAwesome
+                  name="exclamation-triangle"
+                  size={24}
+                  color={Theme.colors.accent.orange}
+                />
               </View>
               <Text style={styles.actionButtonText}>Allergies</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => router.push("/chart-demo" as any)}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.actionIconContainer,
+                  { backgroundColor: `${Theme.colors.accent.purple}20` },
+                ]}
+              >
+                <FontAwesome
+                  name="bar-chart"
+                  size={24}
+                  color={Theme.colors.accent.purple}
+                />
+              </View>
+              <Text style={styles.actionButtonText}>Charts Demo</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -265,7 +320,8 @@ export default function DashboardScreen() {
               </View>
             </View>
             {alerts.map((alert, index) => {
-              const anim = alertAnimations[Math.min(index, alertAnimations.length - 1)];
+              const anim =
+                alertAnimations[Math.min(index, alertAnimations.length - 1)];
               return (
                 <Animated.View
                   key={index}
@@ -274,26 +330,33 @@ export default function DashboardScreen() {
                     transform: [{ translateY: anim.translateY }],
                   }}
                 >
-                  <Card style={styles.alertCard} padding="lg" variant="elevated">
-                <View style={styles.alertMealHeader}>
-                  <FontAwesome 
-                    name={getMealTypeIcon(alert.meal.mealType) as any} 
-                    size={16} 
-                    color={Theme.colors.accent.orange} 
-                  />
-                  <Text style={styles.alertMealType}>
-                    {getMealTypeLabel(alert.meal.mealType)} • {formatTime(alert.meal.occurredAt)}
-                  </Text>
-                </View>
-                <Text style={styles.alertMealItems} numberOfLines={2}>
-                  {alert.meal.items.map(item => item.food.name).join(", ")}
-                </Text>
-                <View style={styles.alertWarningContainer}>
-                  <AllergenWarning 
-                    analysis={alert.analysis} 
-                    variant="banner"
-                  />
-                </View>
+                  <Card
+                    style={styles.alertCard}
+                    padding="lg"
+                    variant="elevated"
+                  >
+                    <View style={styles.alertMealHeader}>
+                      <FontAwesome
+                        name={getMealTypeIcon(alert.meal.mealType) as any}
+                        size={16}
+                        color={Theme.colors.accent.orange}
+                      />
+                      <Text style={styles.alertMealType}>
+                        {getMealTypeLabel(alert.meal.mealType)} •{" "}
+                        {formatTime(alert.meal.occurredAt)}
+                      </Text>
+                    </View>
+                    <Text style={styles.alertMealItems} numberOfLines={2}>
+                      {alert.meal.items
+                        .map((item) => item.food.name)
+                        .join(", ")}
+                    </Text>
+                    <View style={styles.alertWarningContainer}>
+                      <AllergenWarning
+                        analysis={alert.analysis}
+                        variant="banner"
+                      />
+                    </View>
                   </Card>
                 </Animated.View>
               );
@@ -304,7 +367,12 @@ export default function DashboardScreen() {
         {/* Today's Meals */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FontAwesome name="cutlery" size={20} color={Theme.colors.primary.main} style={styles.sectionIcon} />
+            <FontAwesome
+              name="cutlery"
+              size={20}
+              color={Theme.colors.primary.main}
+              style={styles.sectionIcon}
+            />
             <Text style={styles.sectionTitle}>Today's Meals</Text>
             <View style={styles.countBadge}>
               <Text style={styles.countText}>{todayMeals.length}</Text>
@@ -314,19 +382,26 @@ export default function DashboardScreen() {
           {todayMeals.length === 0 ? (
             <Animated.View style={{ opacity: emptyStateOpacity }}>
               <Card style={styles.emptyCard} padding="2xl" variant="outlined">
-                <FontAwesome name="cutlery" size={48} color={Theme.colors.text.tertiary} />
+                <FontAwesome
+                  name="cutlery"
+                  size={48}
+                  color={Theme.colors.text.tertiary}
+                />
                 <Text style={styles.emptyText}>No meals logged today</Text>
                 <TouchableOpacity
                   style={styles.emptyButton}
                   onPress={() => router.push("/(tabs)/AddMeal")}
                 >
-                  <Text style={styles.emptyButtonText}>Add Your First Meal</Text>
+                  <Text style={styles.emptyButtonText}>
+                    Add Your First Meal
+                  </Text>
                 </TouchableOpacity>
               </Card>
             </Animated.View>
           ) : (
             todayMeals.map((meal, index) => {
-              const anim = mealAnimations[Math.min(index, mealAnimations.length - 1)];
+              const anim =
+                mealAnimations[Math.min(index, mealAnimations.length - 1)];
               return (
                 <Animated.View
                   key={meal.id}
@@ -336,35 +411,44 @@ export default function DashboardScreen() {
                   }}
                 >
                   <Card style={styles.mealCard} padding="lg" variant="elevated">
-                <View style={styles.mealHeader}>
-                  <View style={styles.mealTypeContainer}>
-                    <FontAwesome
-                      name={getMealTypeIcon(meal.mealType)}
-                      size={18}
-                      color={Theme.colors.primary.main}
-                      style={styles.mealIcon}
-                    />
-                    <Text style={styles.mealType}>{getMealTypeLabel(meal.mealType)}</Text>
-                  </View>
-                  <Text style={styles.mealTime}>{formatTime(meal.occurredAt)}</Text>
-                </View>
-
-                <View style={styles.mealItems}>
-                  {meal.items.map((item, index) => (
-                    <View 
-                      key={item.food.id} 
-                      style={[
-                        styles.mealItem,
-                        index < meal.items.length - 1 && styles.mealItemBorder
-                      ]}
-                    >
-                      <Text style={styles.mealItemName}>{item.food.name}</Text>
-                      {item.food.kcal && (
-                        <Text style={styles.mealItemKcal}>{item.food.kcal} kcal</Text>
-                      )}
+                    <View style={styles.mealHeader}>
+                      <View style={styles.mealTypeContainer}>
+                        <FontAwesome
+                          name={getMealTypeIcon(meal.mealType)}
+                          size={18}
+                          color={Theme.colors.primary.main}
+                          style={styles.mealIcon}
+                        />
+                        <Text style={styles.mealType}>
+                          {getMealTypeLabel(meal.mealType)}
+                        </Text>
+                      </View>
+                      <Text style={styles.mealTime}>
+                        {formatTime(meal.occurredAt)}
+                      </Text>
                     </View>
-                  ))}
-                </View>
+
+                    <View style={styles.mealItems}>
+                      {meal.items.map((item, index) => (
+                        <View
+                          key={item.food.id}
+                          style={[
+                            styles.mealItem,
+                            index < meal.items.length - 1 &&
+                              styles.mealItemBorder,
+                          ]}
+                        >
+                          <Text style={styles.mealItemName}>
+                            {item.food.name}
+                          </Text>
+                          {item.food.kcal && (
+                            <Text style={styles.mealItemKcal}>
+                              {item.food.kcal} kcal
+                            </Text>
+                          )}
+                        </View>
+                      ))}
+                    </View>
                   </Card>
                 </Animated.View>
               );
@@ -375,7 +459,12 @@ export default function DashboardScreen() {
         {/* Symptoms Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FontAwesome name="heartbeat" size={20} color={Theme.colors.accent.orange} style={styles.sectionIcon} />
+            <FontAwesome
+              name="heartbeat"
+              size={20}
+              color={Theme.colors.accent.orange}
+              style={styles.sectionIcon}
+            />
             <Text style={styles.sectionTitle}>Today's Symptoms</Text>
             <View style={styles.countBadge}>
               <Text style={styles.countText}>{todaySymptoms.length}</Text>
@@ -384,7 +473,11 @@ export default function DashboardScreen() {
 
           {todaySymptoms.length === 0 ? (
             <Card style={styles.emptyCard} padding="2xl" variant="outlined">
-              <FontAwesome name="smile-o" size={48} color={Theme.colors.text.tertiary} />
+              <FontAwesome
+                name="smile-o"
+                size={48}
+                color={Theme.colors.text.tertiary}
+              />
               <Text style={styles.emptyText}>No symptoms logged</Text>
               <Text style={styles.emptySubtext}>Tap to add symptoms</Text>
             </Card>
@@ -397,7 +490,8 @@ export default function DashboardScreen() {
                     style={[
                       styles.severityBadge,
                       symptom.severity === "severe" && styles.severitySevere,
-                      symptom.severity === "moderate" && styles.severityModerate,
+                      symptom.severity === "moderate" &&
+                        styles.severityModerate,
                       symptom.severity === "mild" && styles.severityMild,
                     ]}
                   >
@@ -408,7 +502,11 @@ export default function DashboardScreen() {
                     style={styles.removeSymptomButton}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <FontAwesome name="times" size={12} color={Theme.colors.text.tertiary} />
+                    <FontAwesome
+                      name="times"
+                      size={12}
+                      color={Theme.colors.text.tertiary}
+                    />
                   </TouchableOpacity>
                 </View>
               ))}
@@ -420,7 +518,12 @@ export default function DashboardScreen() {
             onPress={() => router.push("/symptom")}
             activeOpacity={0.8}
           >
-            <FontAwesome name="plus" size={16} color={Theme.colors.primary.main} style={styles.addIcon} />
+            <FontAwesome
+              name="plus"
+              size={16}
+              color={Theme.colors.primary.main}
+              style={styles.addIcon}
+            />
             <Text style={styles.addSymptomText}>Add Symptom</Text>
           </TouchableOpacity>
         </View>
@@ -465,8 +568,8 @@ const styles = StyleSheet.create({
     marginTop: Theme.spacing.md,
   },
   headerGradient: {
-    paddingTop: Theme.spacing['5xl'],
-    paddingBottom: Theme.spacing['2xl'],
+    paddingTop: Theme.spacing["5xl"],
+    paddingBottom: Theme.spacing["2xl"],
     paddingHorizontal: Theme.spacing.lg,
   },
   header: {
@@ -483,7 +586,7 @@ const styles = StyleSheet.create({
   date: {
     ...Theme.typography.bodySmall,
     color: Theme.colors.text.secondary,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   profileButton: {
     padding: Theme.spacing.xs,
@@ -493,8 +596,8 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     backgroundColor: Theme.colors.background.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     ...Theme.shadows.card,
   },
   scrollView: {
@@ -502,10 +605,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Theme.spacing.lg,
-    paddingBottom: Theme.spacing['3xl'],
+    paddingBottom: Theme.spacing["3xl"],
   },
   section: {
-    marginBottom: Theme.spacing['2xl'],
+    marginBottom: Theme.spacing["2xl"],
   },
   sectionHeader: {
     flexDirection: "row",
@@ -527,7 +630,7 @@ const styles = StyleSheet.create({
   },
   countText: {
     ...Theme.typography.bodySmall,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Theme.colors.primary.main,
   },
   // Quick Actions
@@ -543,7 +646,7 @@ const styles = StyleSheet.create({
   actionIconContainer: {
     width: 64,
     height: 64,
-    borderRadius: Theme.radius['2xl'],
+    borderRadius: Theme.radius["2xl"],
     justifyContent: "center",
     alignItems: "center",
     marginBottom: Theme.spacing.md,
@@ -551,7 +654,7 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     ...Theme.typography.bodySmall,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Theme.colors.text.primary,
   },
   // Alerts
@@ -565,7 +668,7 @@ const styles = StyleSheet.create({
   },
   alertMealType: {
     ...Theme.typography.bodySmall,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Theme.colors.text.primary,
     marginLeft: Theme.spacing.sm,
     flex: 1,
@@ -589,7 +692,7 @@ const styles = StyleSheet.create({
   },
   alertCountText: {
     ...Theme.typography.captionSmall,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Theme.colors.text.inverse,
   },
   // Meals
@@ -611,13 +714,13 @@ const styles = StyleSheet.create({
   },
   mealType: {
     ...Theme.typography.body,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Theme.colors.text.primary,
   },
   mealTime: {
     ...Theme.typography.bodySmall,
     color: Theme.colors.text.secondary,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   mealItems: {
     gap: Theme.spacing.xs,
@@ -634,14 +737,14 @@ const styles = StyleSheet.create({
   },
   mealItemName: {
     ...Theme.typography.body,
-    fontWeight: '500',
+    fontWeight: "500",
     color: Theme.colors.text.primary,
     flex: 1,
   },
   mealItemKcal: {
     ...Theme.typography.caption,
     color: Theme.colors.text.secondary,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   // Symptoms
   symptomsContainer: {
@@ -662,7 +765,7 @@ const styles = StyleSheet.create({
   },
   symptomName: {
     ...Theme.typography.bodySmall,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Theme.colors.text.primary,
     marginRight: Theme.spacing.sm,
   },
@@ -682,7 +785,7 @@ const styles = StyleSheet.create({
   },
   severityText: {
     ...Theme.typography.captionSmall,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Theme.colors.text.primary,
     textTransform: "uppercase",
   },
@@ -702,7 +805,7 @@ const styles = StyleSheet.create({
   },
   addSymptomText: {
     ...Theme.typography.bodySmall,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Theme.colors.primary.main,
   },
   removeSymptomButton: {
@@ -715,7 +818,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...Theme.typography.body,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Theme.colors.text.primary,
     marginTop: Theme.spacing.md,
     marginBottom: Theme.spacing.xs,
@@ -754,7 +857,7 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     ...Theme.typography.captionSmall,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Theme.colors.text.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
