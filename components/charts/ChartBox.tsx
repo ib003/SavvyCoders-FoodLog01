@@ -6,6 +6,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { ChartEmptyState } from "./ChartEmptyState";
 import { ChartLoadingState } from "./ChartLoadingState";
 import type { ChartBoxProps } from "./types";
+import { getMaxValue, normalizeValues } from "./utils";
 
 export function ChartBox({
   title,
@@ -33,18 +34,15 @@ export function ChartBox({
     : [];
 
   const latest = hasData ? data[data.length - 1] : undefined;
-  const maxValue =
-    points.length > 0
-      ? Math.max(...points.map((p) => (p.value < 0 ? 0 : p.value)), 1)
-      : 1;
+  const normalizedValues = normalizeValues(points);
+  const maxValue = getMaxValue(points, 1);
 
   const summary = React.useMemo(() => {
-    if (points.length === 0) return { total: 0, avg: 0 };
-    const normalized = points.map((p) => (p.value < 0 ? 0 : p.value));
-    const total = normalized.reduce((acc, v) => acc + v, 0);
-    const avg = total / normalized.length;
+    if (normalizedValues.length === 0) return { total: 0, avg: 0 };
+    const total = normalizedValues.reduce((acc, v) => acc + v, 0);
+    const avg = total / normalizedValues.length;
     return { total, avg };
-  }, [points]);
+  }, [normalizedValues]);
 
   return (
     <Card style={[styles.container, style]} padding="lg" variant="elevated">
@@ -74,8 +72,8 @@ export function ChartBox({
         ) : (
           <View>
             <View style={styles.chartWrapper}>
-              {points.map((item) => {
-                const normalizedValue = item.value < 0 ? 0 : item.value;
+              {points.map((item, i) => {
+                const normalizedValue = normalizedValues[i] ?? 0;
                 const heightRatio = normalizedValue / maxValue;
                 const barHeight = 120 * heightRatio + 4; // keep a minimum sliver
 
