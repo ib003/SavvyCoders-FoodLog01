@@ -33,6 +33,22 @@ function getAppleKey(header, callback) {
 
 // Helper function to verify Apple identity token
 async function verifyAppleToken(identityToken) {
+  // Optional dev shortcut: allow skipping full Apple token verification
+  // Useful if network to Apple's JWKS endpoint is unreliable.
+  if (process.env.SKIP_APPLE_VERIFY === "true") {
+    try {
+      console.log("[APPLE OAUTH] SKIP_APPLE_VERIFY enabled - decoding token without verification");
+      const decoded = jwt.decode(identityToken);
+      if (!decoded) {
+        throw new Error("Failed to decode Apple identity token");
+      }
+      return decoded;
+    } catch (err) {
+      console.error("[APPLE OAUTH] Failed to decode token with SKIP_APPLE_VERIFY:", err);
+      throw err;
+    }
+  }
+
   return new Promise((resolve, reject) => {
     jwt.verify(
       identityToken,
