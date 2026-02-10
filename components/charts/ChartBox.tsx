@@ -14,6 +14,14 @@ export function ChartBox({
   emptyText = "No data",
   style,
 }: ChartBoxProps) {
+  const formatValue = (value: number) => {
+    if (!Number.isFinite(value)) return "—";
+    const abs = Math.abs(value);
+    if (abs >= 100) return String(Math.round(value));
+    if (abs >= 10) return value.toFixed(1).replace(/\.0$/, "");
+    return value.toFixed(2).replace(/0$/, "").replace(/\.0$/, "");
+  };
+
   const hasData = data && data.length > 0;
   const maxPoints = 7;
   const points = hasData
@@ -22,6 +30,7 @@ export function ChartBox({
       : data
     : [];
 
+  const latest = hasData ? data[data.length - 1] : undefined;
   const maxValue =
     points.length > 0
       ? Math.max(...points.map((p) => (p.value < 0 ? 0 : p.value)), 1)
@@ -34,7 +43,17 @@ export function ChartBox({
           <Text style={styles.title}>{title}</Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
-        {unit ? <Text style={styles.unit}>{unit}</Text> : null}
+        {latest ? (
+          <View style={styles.headerRight}>
+            <Text style={styles.latestValue}>
+              {formatValue(latest.value)}
+              {unit ? ` ${unit}` : ""}
+            </Text>
+            {unit ? <Text style={styles.unit}>{unit}</Text> : null}
+          </View>
+        ) : unit ? (
+          <Text style={styles.unit}>{unit}</Text>
+        ) : null}
       </View>
 
       <View style={styles.content}>
@@ -52,8 +71,7 @@ export function ChartBox({
               return (
                 <View key={item.label} style={styles.barGroup}>
                   <Text style={styles.barValue}>
-                    {normalizedValue}
-                    {unit ? "" : ""}
+                    {formatValue(normalizedValue)}
                   </Text>
                   <View style={styles.barOuter}>
                     <View style={[styles.barInner, { height: barHeight }]} />
@@ -84,6 +102,14 @@ const styles = StyleSheet.create({
   headerText: {
     flex: 1,
     paddingRight: Theme.spacing.md,
+  },
+  headerRight: {
+    alignItems: "flex-end",
+  },
+  latestValue: {
+    ...Theme.typography.body,
+    color: Theme.colors.text.primary,
+    fontWeight: "700",
   },
   title: {
     ...Theme.typography.sectionTitle,
