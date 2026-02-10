@@ -13,4 +13,5 @@ export interface ChartBoxProps {
   loading?: boolean;
   emptyText?: string;
   style?: ViewStyle;
+  maxBars?: number;
 }

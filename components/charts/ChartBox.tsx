@@ -16,6 +16,7 @@ export function ChartBox({
   loading = false,
   emptyText = "No data",
   style,
+  maxBars = 7,
 }: ChartBoxProps) {
   const formatValue = (value: number) => {
     if (!Number.isFinite(value)) return "—";
@@ -26,10 +27,9 @@ export function ChartBox({
   };
 
   const hasData = data && data.length > 0;
-  const maxPoints = 7;
   const points = hasData
-    ? data.length > maxPoints
-      ? data.slice(-maxPoints)
+    ? data.length > maxBars
+      ? data.slice(-maxBars)
       : data
     : [];
 
@@ -38,11 +38,12 @@ export function ChartBox({
   const maxValue = getMaxValue(points, 1);
 
   const summary = React.useMemo(() => {
-    if (normalizedValues.length === 0) return { total: 0, avg: 0 };
-    const total = normalizedValues.reduce((acc, v) => acc + v, 0);
-    const avg = total / normalizedValues.length;
+    const fullNormalized = normalizeValues(data);
+    if (fullNormalized.length === 0) return { total: 0, avg: 0 };
+    const total = fullNormalized.reduce((acc, v) => acc + v, 0);
+    const avg = total / fullNormalized.length;
     return { total, avg };
-  }, [normalizedValues]);
+  }, [data]);
 
   return (
     <Card style={[styles.container, style]} padding="lg" variant="elevated">
