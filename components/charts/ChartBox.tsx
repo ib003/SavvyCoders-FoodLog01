@@ -1,22 +1,9 @@
 import { Card } from "@/components/ui/Card";
 import { Theme } from "@/constants/Theme";
 import React from "react";
-import { StyleSheet, Text, View, ViewStyle } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
-type ChartDatum = {
-  label: string;
-  value: number;
-};
-
-export interface ChartBoxProps {
-  title: string;
-  subtitle?: string;
-  data: ChartDatum[];
-  unit?: string;
-  loading?: boolean;
-  emptyText?: string;
-  style?: ViewStyle;
-}
+import type { ChartBoxProps } from "./types";
 
 export function ChartBox({
   title,
