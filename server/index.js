@@ -594,32 +594,46 @@ app.get("/auth/me", auth, async (req, res) => {
 });
 
 app.post("/meals", auth, async (req, res) => {
-  const { occurred_at, meal_type, note, items } = req.body;
-  if (!occurred_at || !meal_type || !Array.isArray(items)) {
-    return res.status(400).json({ error: "invalid body" });
-  }
-  const meal = await prisma.meal.create({
-    data: { userId: req.userId, dateTime: new Date(occurred_at), mealType: meal_type, note: note || null },
-  });
-  if (items.length) {
-    await prisma.mealItem.createMany({
-      data: items.map(it => ({
-        mealId: meal.id,
-        foodId: it.food_id,
-        quantity: it.qty ?? it.quantity ?? 1,
-        unit: it.unit ?? null,
-        notes: it.notes ?? null,
-        calories: it.calories ?? null,
-        protein: it.protein ?? null,
-        carbs: it.carbs ?? null,
-        fat: it.fat ?? null,
-        fiber: it.fiber ?? null,
-        sugar: it.sugar ?? null,
-        sodium: it.sodium ?? null
-      }))
+  try {
+    const { occurred_at, meal_type, note, items } = req.body;
+    if (!occurred_at || !meal_type || !Array.isArray(items)) {
+      return res.status(400).json({ error: "invalid body" });
+    }
+
+    const meal = await prisma.meal.create({
+      data: {
+        userId: req.userId,
+        dateTime: new Date(occurred_at),
+        mealType: meal_type,
+        note: note || null
+      },
     });
+
+    if (items.length) {
+      // Accept either food_id (snake) or foodId (camel)
+      await prisma.mealItem.createMany({
+        data: items.map((it) => ({
+          mealId: meal.id,
+          foodId: it.food_id ?? it.foodId,
+          quantity: it.qty ?? it.quantity ?? 1,
+          unit: it.unit ?? null,
+         notes: it.notes ?? null,
+          calories: it.calories ?? null,
+          protein: it.protein ?? null,
+          carbs: it.carbs ?? null,
+          fat: it.fat ?? null,
+          fiber: it.fiber ?? null,
+          sugar: it.sugar ?? null,
+          sodium: it.sodium ?? null,
+        })),
+      });
+    }
+
+    return res.json(meal);
+  } catch (e) {
+    console.error("[MEALS] Save failed:", e);
+    return res.status(500).json({ error: "failed_to_save_meal", message: e.message });
   }
-  res.json(meal);
 });
 
 app.get("/meals", auth, async (req, res) => {
