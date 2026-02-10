@@ -1,17 +1,17 @@
+import { getLastNDaysLabels } from "@/utils/dates";
 import type { ChartPoint } from "./types";
 
 /**
  * Mock weekly calorie data for charts.
- * Returns 7 points (Mon–Sun) with realistic kcal values.
+ * Returns `days` points with realistic kcal values and
+ * programmatically generated day labels.
  */
-export function mockWeeklyCalories(): ChartPoint[] {
-  return [
-    { label: "Mon", value: 1820 },
-    { label: "Tue", value: 1950 },
-    { label: "Wed", value: 1725 },
-    { label: "Thu", value: 2105 },
-    { label: "Fri", value: 2230 },
-    { label: "Sat", value: 2450 },
-    { label: "Sun", value: 1875 },
-  ];
+export function mockWeeklyCalories(days: number = 7): ChartPoint[] {
+  const labels = getLastNDaysLabels(days);
+  const values = [1820, 1950, 1725, 2105, 2230, 2450, 1875];
+
+  return labels.map((label, index) => ({
+    label,
+    value: values[index % values.length],
+  }));
 }
