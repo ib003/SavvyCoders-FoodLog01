@@ -18,6 +18,7 @@ export function ChartBox({
   style,
   maxBars = 7,
 }: ChartBoxProps) {
+  // NaN/non-finite -> display placeholder
   const formatValue = (value: number) => {
     if (!Number.isFinite(value)) return "—";
     const abs = Math.abs(value);
@@ -34,20 +35,43 @@ export function ChartBox({
     : [];
 
   const latest = hasData ? data[data.length - 1] : undefined;
-  const normalizedValues = normalizeValues(points);
-  const maxValue = getMaxValue(points, 1);
+  const normalizedValues = normalizeValues(points); // NaN/negative already 0 in utils
+  const maxValue = getMaxValue(points, 1); // always >= 1 when has data
 
   const summary = React.useMemo(() => {
     const fullNormalized = normalizeValues(data);
     if (fullNormalized.length === 0) return { total: 0, avg: 0 };
-    const total = fullNormalized.reduce((acc, v) => acc + v, 0);
-    const avg = total / fullNormalized.length;
+    const total = fullNormalized.reduce(
+      (acc, v) => acc + (Number.isFinite(v) ? v : 0),
+      0,
+    );
+    const avg =
+      fullNormalized.length > 0 && Number.isFinite(total)
+        ? total / fullNormalized.length
+        : 0;
     return { total, avg };
   }, [data]);
 
+  const headerLabel = [
+    title,
+    subtitle ?? "",
+    latest
+      ? `Latest value ${formatValue(latest.value)}${unit ? ` ${unit}` : ""}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(". ");
+  const headerHint =
+    "Chart summary. Total and average are shown at the bottom.";
+
   return (
     <Card style={[styles.container, style]} padding="lg" variant="elevated">
-      <View style={styles.header}>
+      <View
+        style={styles.header}
+        accessibilityLabel={headerLabel}
+        accessibilityHint={headerHint}
+        accessibilityRole="header"
+      >
         <View style={styles.headerText}>
           <Text style={styles.title}>{title}</Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
@@ -75,14 +99,29 @@ export function ChartBox({
             <View style={styles.chartWrapper}>
               {points.map((item, i) => {
                 const normalizedValue = normalizedValues[i] ?? 0;
-                const heightRatio = normalizedValue / maxValue;
-                const barHeight = 120 * heightRatio + 4; // keep a minimum sliver
+                // Guard division: avoid NaN when maxValue is 0 (shouldn't happen)
+                const heightRatio =
+                  Number.isFinite(maxValue) && maxValue > 0
+                    ? normalizedValue / maxValue
+                    : 0;
+                const rawHeight = 120 * heightRatio + 4;
+                const barHeight = Math.max(
+                  0,
+                  Number.isFinite(rawHeight) ? rawHeight : 4,
+                ); // minimum sliver
+                const valueStr = formatValue(normalizedValue);
+                const barLabel = `${item.label}: ${valueStr}${unit ? ` ${unit}` : ""}`;
+                const barHint = `Bar ${i + 1} of ${points.length}, value ${valueStr}`;
 
                 return (
-                  <View key={item.label} style={styles.barGroup}>
-                    <Text style={styles.barValue}>
-                      {formatValue(normalizedValue)}
-                    </Text>
+                  <View
+                    key={item.label}
+                    style={styles.barGroup}
+                    accessibilityLabel={barLabel}
+                    accessibilityHint={barHint}
+                    accessibilityRole="text"
+                  >
+                    <Text style={styles.barValue}>{valueStr}</Text>
                     <View style={styles.barOuter}>
                       <View style={[styles.barInner, { height: barHeight }]} />
                     </View>
