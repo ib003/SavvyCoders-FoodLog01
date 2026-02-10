@@ -5,7 +5,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const { OAuth2Client } = require("google-auth-library");
 const jwksClient = require("jwks-rsa");
-const { PrismaClient } = require("@prisma/client");
+const { PrismaClient, Prisma } = require("@prisma/client");
 const prisma = new PrismaClient();
 const OpenAI = require("openai");
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -600,34 +600,105 @@ app.post("/meals", auth, async (req, res) => {
       return res.status(400).json({ error: "invalid body" });
     }
 
+    //normalize meal strings
+    const mealTypeMap = {
+      breakfast: "BREAKFAST",
+      lunch: "LUNCH",
+      dinner: "DINNER",
+      snack: "SNACK",
+      snacks: "SNACK",
+    };
+    const mealTypeKey = String(meal_type).trim().toLowerCase();
+    const normalizedMealType = mealTypeMap[mealTypeKey] || String(meal_type).trim();
+
     const meal = await prisma.meal.create({
       data: {
         userId: req.userId,
         dateTime: new Date(occurred_at),
-        mealType: meal_type,
+        mealType: normalizedMealType,
         note: note || null
       },
     });
 
-    if (items.length) {
-      // Accept either food_id (snake) or foodId (camel)
-      await prisma.mealItem.createMany({
-        data: items.map((it) => ({
-          mealId: meal.id,
-          foodId: it.food_id ?? it.foodId,
-          quantity: it.qty ?? it.quantity ?? 1,
-          unit: it.unit ?? null,
-         notes: it.notes ?? null,
-          calories: it.calories ?? null,
-          protein: it.protein ?? null,
-          carbs: it.carbs ?? null,
-          fat: it.fat ?? null,
-          fiber: it.fiber ?? null,
-          sugar: it.sugar ?? null,
-          sodium: it.sodium ?? null,
-        })),
-      });
+if (items.length) {
+  const rows = [];
+
+  for (const it of items) {
+    let foodId = it.food_id ?? it.foodId;
+
+    //If client didn't send a real Food.id, resolve/create by externalId or name
+    if (foodId == null) {
+      const externalId = it.externalId ?? it.external_id ?? null;
+      const name = it.name ?? null;
+      const brand = it.brand ?? null;
+      const kcal = it.kcal ?? it.calories ?? null;
+
+      let food = null;
+
+      if (externalId) {
+        food = await prisma.food.findFirst({
+          where: { externalId: String(externalId) },
+        });
+
+        if (!food) {
+          food = await prisma.food.create({
+            data: {
+              name: name || `Food ${externalId}`,
+              brand: brand,
+              calories: kcal != null ? Number(kcal) : null,
+              source: "UPC_API",
+              externalId: String(externalId),
+            },
+          });
+        }
+      } else if (name) {
+        //fallback: match by name/brand, else create
+        food = await prisma.food.findFirst({
+          where: {
+            name: { equals: String(name), mode: "insensitive" },
+            ...(brand ? { brand: { equals: String(brand), mode: "insensitive" } } : {}),
+          },
+        });
+
+        if (!food) {
+          food = await prisma.food.create({
+            data: {
+              name: String(name),
+              brand: brand,
+              calories: kcal != null ? Number(kcal) : null,
+              source: "UPC_API",
+              externalId: null,
+            },
+          });
+        }
+      } else {
+        return res.status(400).json({
+          error: "invalid body",
+          message: "Missing food_id and no externalId/name provided",
+        });
+      }
+
+      foodId = food.id;
     }
+
+    rows.push({
+      mealId: meal.id,
+      foodId: foodId,
+      quantity: it.qty ?? it.quantity ?? 1,
+      unit: it.unit ?? null,
+      notes: it.notes ?? null,
+      calories: it.calories ?? null,
+      protein: it.protein ?? null,
+      carbs: it.carbs ?? null,
+      fat: it.fat ?? null,
+      fiber: it.fiber ?? null,
+      sugar: it.sugar ?? null,
+      sodium: it.sodium ?? null,
+    });
+  }
+
+  await prisma.mealItem.createMany({ data: rows });
+}
 
     return res.json(meal);
   } catch (e) {

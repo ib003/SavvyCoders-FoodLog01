@@ -126,9 +126,13 @@ export default function AddSearch() {
         body: JSON.stringify({
           occurred_at: now.toISOString(),
           meal_type: mealType,
-          items: mealItems.map(item => ({
-            food_id: item.food.id,
-            qty: item.qty,
+          items: mealItems.map((item) => ({
+          food_id: item.food.id ?? null,              //keep if it exists
+          externalId: item.food.externalId ?? null,   //allow server to resolve/create
+          name: item.food.name,
+          brand: item.food.brand ?? null,
+          kcal: item.food.kcal ?? null,
+          qty: item.qty,
           })),
         }),
       });
@@ -290,11 +294,7 @@ export default function AddSearch() {
                 <View style={styles.foodInfo}>
                   <Text style={styles.foodName}>{food.name}</Text>
                   {!!food.brand && <Text style={styles.foodBrand}>{food.brand}</Text>}
-                  {!!food.servingUnit && (
-                    <Text style={styles.foodServing}>
-                      {food.servingQty || 1} {food.servingUnit}
-                    </Text>
-                  )}
+                  <Text style={styles.foodServing}>1 serving (100 g)</Text>
                 </View>
 
                 {kcalVal > 0 && (
@@ -340,12 +340,13 @@ export default function AddSearch() {
                 )}
 
                 <View style={styles.quantityContainer}>
-                  <Text style={styles.quantityLabel}>Quantity</Text>
+                  <Text style={styles.quantityLabel}></Text>
                   <TextInput
                     style={styles.quantityInput}
                     value={quantity}
                     onChangeText={setQuantity}
-                    keyboardType="decimal-pad"
+                    keyboardType="numbers-and-punctuation"
+                    onSubmitEditing={handleAddToMeal}
                     placeholder="1"
                   />
                   {selectedFood.servingUnit && (
