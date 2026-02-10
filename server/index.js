@@ -1053,7 +1053,9 @@ app.put("/user/preferences", auth, async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
+app.get("/health", (req, res) => {
+  res.status(200).json({ ok: true });
+});
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`API running on http://0.0.0.0:${PORT}`);

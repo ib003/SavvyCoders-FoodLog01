@@ -1,5 +1,2 @@
-// constants/api.ts
-
-export const API_BASE =
-  process.env.EXPO_PUBLIC_API_BASE ??
-  "http://localhost:3000";
+export const API_BASE = process.env.EXPO_PUBLIC_API_BASE!;
+console.log("[API] API_BASE =", API_BASE);
