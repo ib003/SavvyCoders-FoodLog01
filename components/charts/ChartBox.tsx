@@ -3,6 +3,7 @@ import { Theme } from "@/constants/Theme";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { ChartEmptyState } from "./ChartEmptyState";
 import type { ChartBoxProps } from "./types";
 
 export function ChartBox({
@@ -68,7 +69,7 @@ export function ChartBox({
         {loading ? (
           <Text style={styles.loadingText}>Loading chart data...</Text>
         ) : !hasData ? (
-          <Text style={styles.emptyText}>{emptyText}</Text>
+          <ChartEmptyState message={emptyText} />
         ) : (
           <View>
             <View style={styles.chartWrapper}>
