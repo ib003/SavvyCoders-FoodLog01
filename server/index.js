@@ -56,7 +56,7 @@ async function verifyAppleToken(identityToken) {
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "20mb" }));
+app.use(express.json({ limit: "60mb" }));
 
 function toFoodResponse(food) {
   if (!food) return food;
