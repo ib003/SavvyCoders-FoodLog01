@@ -8,7 +8,7 @@ const ANDROID_EMULATOR_HOST = `http://10.0.2.2:${DEV_PORT}`;
 const IOS_SIMULATOR_HOST = `http://localhost:${DEV_PORT}`;
 
 //Fallback for physical device testing (EDIT THIS TO YOUR OWN PC IP IF YOU ARE TESTING)
-const LAN_FALLBACK_HOST = `http://<YOUR IP HERE>:${DEV_PORT}`;
+const LAN_FALLBACK_HOST = "";
 
 export const API_BASE =
   ENV_URL ||
