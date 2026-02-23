@@ -17,7 +17,7 @@ import {
 } from "react-native";
 
 interface Food {
-  id: string;
+  id: number;
   name: string;
   brand?: string;
   servingUnit?: string;
