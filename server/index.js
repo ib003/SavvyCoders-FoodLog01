@@ -8,7 +8,16 @@ const jwksClient = require("jwks-rsa");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const OpenAI = require("openai");
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+let openai = null;
+
+if (process.env.OPENAI_API_KEY) {
+  openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  console.log("OpenAI initialized.");
+} else {
+  console.warn("OPENAI_API_KEY not set. AI features disabled.");
+}
+
 
 // Initialize Google OAuth client
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -544,196 +553,155 @@ app.get("/meals", auth, async (req, res) => {
 
 // --- AI Food Analysis ---
 // --- AI Food Analysis ---
-app.post("/api/analyze-food", async (req, res) =>
-{
-const image = req.body.image
+app.post("/api/analyze-food", async (req, res) => {
+  const image = req.body.image;
 
-if (!image)
-{
-return res.status(400).json({ error: "missing image" })
-}
-
-let dataUrl = image
-if (!dataUrl.startsWith("data:"))
-{
-dataUrl = "data:image/jpeg;base64," + dataUrl
-}
-
-//this object will hold the final ai estimate for the food in the picture
-let result =
-{
-name: "unknown food",
-calories: 0,
-protein: 0,
-carbs: 0,
-fat: 0,
-ingredients: []
-}
-
-try
-{
-//this is the prompt i give ChatGPT to get the estimate  
-const promptText = "you see a photo of food. estimate the dish name, total calories, grams of protein, grams of carbs, grams of fat, and a short list of ingredients. respond only with json using keys name, calories, protein, carbs, fat, ingredients where ingredients is an array of strings"
-
-const aiRes = await openai.responses.create({
-model: "gpt-4.1-mini",
-input: [
-{
-role: "user",
-content: [
-{ type: "input_text", text: promptText },
-{ type: "input_image", image_url: dataUrl }
-]
-}
-]
-})
-
-let aiText = null
-
-//this if statement checks if the output i got from ChatGPT is in the right format/is usable
-if (aiRes && aiRes.output && aiRes.output[0] && aiRes.output[0].content && aiRes.output[0].content[0] && aiRes.output[0].content[0].text)
-{
-aiText = aiRes.output[0].content[0].text
-}
-
-//if aitext is not null, that means the previous check was fine
-if (aiText)
-{
-try
-{
-const parsed = JSON.parse(aiText)
-result.name = parsed.name || result.name
-result.calories = parsed.calories || result.calories
-result.protein = parsed.protein || result.protein
-result.carbs = parsed.carbs || result.carbs
-result.fat = parsed.fat || result.fat
-result.ingredients = parsed.ingredients || result.ingredients
-}
-catch (e)
-{
-console.error("json parse error", e)
-}
-}
-}
-catch (err)
-{
-console.error("ai error", err)
-}
-//stuff above is just broad error catching
-if (!result || !result.name)
-{
-return res.status(500).json({ error: "ai failed to analyze image" })
-}
-
-//this function normalizes what the ai gave us to usable food object
-function normalizeFood(result)
-{
-  if (!result)
-  {
-  return null
+  if (!image) {
+    return res.status(400).json({ error: "missing image" });
   }
-  
-  if (typeof result !== "object")
-{
-return null
-}
 
-let calories = Number(result.calories)
-//all of these if statements below just make sure the avlues they get are positive, usable numbers
-if (isNaN(calories) || calories < 0)
-{
-calories = 0
-}
+  if (!openai) {
+    return res.status(503).json({ error: "AI service not configured" });
+  }
 
-let protein = Number(result.protein)
-if (isNaN(protein) || protein < 0)
-{
-protein = 0
-}
+  // Make sure it is a data URL
+  let dataUrl = image;
+  if (!dataUrl.startsWith("data:")) {
+    dataUrl = "data:image/jpeg;base64," + dataUrl;
+  }
 
-let carbs = Number(result.carbs)
-if (isNaN(carbs) || carbs < 0)
-{
-carbs = 0
-}
+  // Default fallback
+  let result = {
+    name: "unknown food",
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+    ingredients: [],
+  };
 
-let fat = Number(result.fat)
-if (isNaN(fat) || fat < 0)
-{
-fat = 0
-}
+  // Helper: pull all text out of Responses API output
+  function getResponseText(aiRes) {
+    if (!aiRes) return "";
+    if (typeof aiRes.output_text === "string") return aiRes.output_text; // sometimes available
+    const out = aiRes.output || [];
+    let text = "";
+    for (const item of out) {
+      const content = item?.content || [];
+      for (const c of content) {
+        if (c?.type === "output_text" && typeof c?.text === "string") {
+          text += c.text;
+        }
+      }
+    }
+    return text.trim();
+  }
 
-let ingredients = []
-if (Array.isArray(result.ingredients))
-{
-ingredients = result.ingredients.map((item) =>
-{
-if (typeof item === "string")
-{
-return item
-}
-return String(item)
-})
-}
+  // Normalize to usable numbers/arrays
+  function normalizeFood(raw) {
+    if (!raw || typeof raw !== "object") return null;
 
-//we aren't using result.value for these values anymore because they all got tested and if need be, cleaned in the if statements above
-return {
-name: result.name || "unknown",
-calories: calories,
-protein: protein,
-carbs: carbs,
-fat: fat,
-ingredients: ingredients
-}
-}
+    const name = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : "unknown food";
 
-//replacing saveFood with a dummy function because the Postgre server didn't get set up, and I can't be bothered to do that today
-async function saveFood(food)
-{
-return null
-}
+    let calories = Number(raw.calories);
+    if (!Number.isFinite(calories) || calories < 0) calories = 0;
 
-//this function saves the normalized food to the database so we can reuse it later
-/*async function saveFood(food)
-{
-if (!food || !food.name)
-{
-return null
-}
+    let protein = Number(raw.protein);
+    if (!Number.isFinite(protein) || protein < 0) protein = 0;
 
-let saved = null
+    let carbs = Number(raw.carbs);
+    if (!Number.isFinite(carbs) || carbs < 0) carbs = 0;
 
-try
-{
-saved = await prisma.food.create({
-data:
-{
-name: food.name,
-calories: food.calories
-}
-})
-}
-catch (e)
-{
-console.error("db error", e)
-return null
-}
+    let fat = Number(raw.fat);
+    if (!Number.isFinite(fat) || fat < 0) fat = 0;
 
-return saved
-}*/
+    let ingredients = [];
+    if (Array.isArray(raw.ingredients)) {
+      ingredients = raw.ingredients
+        .map((x) => (typeof x === "string" ? x.trim() : String(x).trim()))
+        .filter(Boolean)
+        .slice(0, 25);
+    }
 
-//in case normalizeFood returns NULL, we return an error message
-const clean = normalizeFood(result)
+    return { name, calories, protein, carbs, fat, ingredients };
+  }
 
-if (!clean)
-{
-return res.status(500).json({ error: "ai result invalid" })
-}
+  // Optional: saveFood (currently disabled in your code)
+  async function saveFood(food) {
+    return null;
+  }
 
-const saved = await saveFood(clean)
+  try {
+    const aiRes = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      // ✅ Force STRICT JSON output using a schema
+      text: {
+        format: {
+          type: "json_schema",
+          name: "food_estimate",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              name: { type: "string" },
+              calories: { type: "number" },
+              protein: { type: "number" },
+              carbs: { type: "number" },
+              fat: { type: "number" },
+              ingredients: { type: "array", items: { type: "string" } },
+            },
+            required: ["name", "calories", "protein", "carbs", "fat", "ingredients"],
+          },
+        },
+      },
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text:
+                "Look at the image. Identify the food as best you can and estimate nutrition. " +
+                "Return only the JSON object that matches the schema.",
+            },
+            { type: "input_image", image_url: dataUrl },
+          ],
+        },
+      ],
+    });
 
-res.json(saved || clean)
-})
+    const aiText = getResponseText(aiRes);
+
+    // With json_schema strict, this should already be JSON text
+    // But still parse defensively.
+    let parsed = null;
+    try {
+      parsed = JSON.parse(aiText);
+    } catch (e) {
+      console.error("AI returned non-JSON text:", aiText);
+      throw new Error("AI did not return valid JSON");
+    }
+
+    const clean = normalizeFood(parsed);
+    if (!clean) {
+      return res.status(500).json({ error: "ai result invalid" });
+    }
+
+    // Save (optional)
+    const saved = await saveFood(clean);
+
+    return res.json(saved || clean);
+  } catch (err) {
+    console.error("ai error", err);
+
+    // return fallback so UI doesn’t break, but include error message for debugging
+    return res.status(500).json({
+      ...result,
+      error: "ai failed to analyze image",
+    });
+  }
+});
 
 // --- User Preferences ---
 app.get("/user/preferences", auth, async (req, res) => {
