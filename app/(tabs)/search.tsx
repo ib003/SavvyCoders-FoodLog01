@@ -271,8 +271,7 @@ if (!token) {
       occurred_at: new Date().toISOString(),
       meal_type: mealTypeToApi(mealType), 
       items: mealItems.map((item) => ({
-        food_id: item.food.id ?? null,
-        externalId: item.food.externalId ?? null,
+       food_id: item.food.source === "FDC_API" ? null : item.food.id ?? null,        externalId: item.food.externalId ?? null,
         name: item.food.name,
         brand: item.food.brand ?? null,
         source: item.food.source ?? "UPC_API",

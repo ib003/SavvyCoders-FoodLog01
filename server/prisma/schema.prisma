@@ -183,6 +183,7 @@ enum MealType {
   DINNER
   SNACK
   OTHER
+  
 }
 
 enum VerificationTokenType {
