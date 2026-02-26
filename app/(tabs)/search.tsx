@@ -6,6 +6,7 @@ import { auth } from "@/src/lib/auth";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
+import { saveFood } from "../src/api/savedFoods";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, } from "react-native";
 
 interface Food {
@@ -72,6 +73,26 @@ export default function AddSearch() {
 
     return () => clearTimeout(delayDebounce);
   }, [searchQuery, searchFoods]);
+  const handleSaveFood = async (food: Food) => {
+  try {
+    await saveFood({
+      foodId: food.id,
+      id: food.id,
+      externalId: food.externalId ?? null,
+      barcode: (food as any).barcode ?? null,
+      name: food.name,
+      brand: food.brand ?? null,
+      kcal: getFoodKcal(food),
+      servingQty: food.servingQty ?? null,
+      servingUnit: food.servingUnit ?? null,
+      imageUrl: (food as any).imageUrl ?? null,
+      source: (food as any).source ?? "UPC_API",
+    });
+    Alert.alert("Saved", `${food.name} saved`);
+  } catch (e: any) {
+    Alert.alert("Error", e?.message || "Failed to save");
+  }
+};
 
   const handleFoodSelect = async (food: Food) => {
     setSelectedFood(food);
