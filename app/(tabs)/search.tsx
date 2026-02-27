@@ -1,12 +1,12 @@
 import AllergenWarning from "@/components/AllergenWarning";
 import { Colors } from "@/constants/Colors";
+import { saveFood } from "@/src/_api/savedFoods";
 import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
 import { auth } from "@/src/lib/auth";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { saveFood } from "../src/api/savedFoods";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, } from "react-native";
 
 interface Food {
@@ -73,9 +73,29 @@ export default function AddSearch() {
 
     return () => clearTimeout(delayDebounce);
   }, [searchQuery, searchFoods]);
+  const getFoodKcal = (food: Food | null | undefined) => {
+    const v = Number((food as any)?.kcal ?? (food as any)?.calories ?? (food as any)?.energyKcal);
+    return Number.isFinite(v) ? v : 0;
+  };
+
+  const getFoodKcalForQty = (food: Food, qty: number) => {
+    const baseKcal = getFoodKcal(food);
+
+    // If servingUnit is grams and servingQty exists (often "100 g"),
+    // scale calories proportionally. Otherwise treat qty as "servings".
+    const unit = String(food.servingUnit ?? "").toLowerCase();
+    const baseQty = Number(food.servingQty);
+
+    const looksLikeGrams = unit === "g" || unit.includes("gram");
+    if (looksLikeGrams && Number.isFinite(baseQty) && baseQty > 0) {
+      return baseKcal * (qty / baseQty);
+    }
+
+    return baseKcal * qty;
+  };
   const handleSaveFood = async (food: Food) => {
   try {
-    await saveFood({
+    const result = await saveFood({
       foodId: food.id,
       id: food.id,
       externalId: food.externalId ?? null,
@@ -88,6 +108,10 @@ export default function AddSearch() {
       imageUrl: (food as any).imageUrl ?? null,
       source: (food as any).source ?? "UPC_API",
     });
+     if (!result) {
+      Alert.alert("Login required", "Please log in to save foods 🔒");
+      return;
+    }
     Alert.alert("Saved", `${food.name} saved`);
   } catch (e: any) {
     Alert.alert("Error", e?.message || "Failed to save");
@@ -123,7 +147,7 @@ export default function AddSearch() {
     const newItems = mealItems.filter((_, i) => i !== index);
     setMealItems(newItems);
   };
-
+ 
   const handleSaveMeal = async () => {
     if (mealItems.length === 0) {
       Alert.alert("Empty Meal", "Please add at least one food item to your meal.");
@@ -182,26 +206,7 @@ export default function AddSearch() {
     }
   };
 
-    const getFoodKcal = (food: Food | null | undefined) => {
-    const v = Number((food as any)?.kcal ?? (food as any)?.calories ?? (food as any)?.energyKcal);
-    return Number.isFinite(v) ? v : 0;
-  };
-
-  const getFoodKcalForQty = (food: Food, qty: number) => {
-    const baseKcal = getFoodKcal(food);
-
-    // If servingUnit is grams and servingQty exists (often "100 g"),
-    // scale calories proportionally. Otherwise treat qty as "servings".
-    const unit = String(food.servingUnit ?? "").toLowerCase();
-    const baseQty = Number(food.servingQty);
-
-    const looksLikeGrams = unit === "g" || unit.includes("gram");
-    if (looksLikeGrams && Number.isFinite(baseQty) && baseQty > 0) {
-      return baseKcal * (qty / baseQty);
-    }
-
-    return baseKcal * qty;
-  };
+   
 
   const getTotalCalories = () => {
     return mealItems.reduce((sum, item) => {
@@ -307,37 +312,45 @@ export default function AddSearch() {
           const servingUnit = String(food.servingUnit ?? "").trim();
 
           return (
-            <TouchableOpacity
-              key={key}
-              style={styles.foodCard}
-              onPress={() => handleFoodSelect(food)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.foodCardContent}>
-                <View style={styles.foodInfo}>
-                  <Text style={styles.foodName}>{food.name}</Text>
-                  {!!food.brand && <Text style={styles.foodBrand}>{food.brand}</Text>}
-                  {servingUnit ? (
-                    <Text style={styles.foodServing}>
-                      {Number.isFinite(servingQty) && servingQty > 0 ? servingQty : 1} {servingUnit}
-                    </Text>
-                  ) : (
-                    <Text style={styles.foodServing}>1 serving</Text>
-                  )}
-                </View>
+  <TouchableOpacity
+    key={key}
+    style={styles.foodCard}
+    onPress={() => handleFoodSelect(food)}
+    activeOpacity={0.7}
+  >
+    <View style={styles.foodCardContent}>
+      <View style={styles.foodInfo}>
+        <Text style={styles.foodName}>{food.name}</Text>
+        {!!food.brand && <Text style={styles.foodBrand}>{food.brand}</Text>}
+        {servingUnit ? (
+          <Text style={styles.foodServing}>
+            {Number.isFinite(servingQty) && servingQty > 0 ? servingQty : 1} {servingUnit}
+          </Text>
+        ) : (
+          <Text style={styles.foodServing}>1 serving</Text>
+        )}
+      </View>
 
-                {kcalVal > 0 && (
-                  <View style={styles.calorieBadge}>
-                    <Text style={styles.calorieText}>{Math.round(kcalVal)}</Text>
-                    <Text style={styles.calorieUnit}>kcal</Text>
-                  </View>
-                )}
-              </View>
+      {kcalVal > 0 && (
+        <View style={styles.calorieBadge}>
+          <Text style={styles.calorieText}>{Math.round(kcalVal)}</Text>
+          <Text style={styles.calorieUnit}>kcal</Text>
+        </View>
+      )}
+    </View>
 
-              <FontAwesome name="plus-circle" size={24} color={Colors.primary.green} />
-            </TouchableOpacity>
-          );
-        })}
+    <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 10 }}>
+      <TouchableOpacity
+        onPress={(e) => {
+          e.stopPropagation();
+          handleSaveFood(food);
+        }}
+      >
+        <FontAwesome name="bookmark" size={22} color={Colors.primary.orange} />
+      </TouchableOpacity>
+    </View>
+  </TouchableOpacity>
+); })} 
       </ScrollView>
 
       {/* Quantity Modal */}
@@ -533,8 +546,8 @@ const styles = StyleSheet.create({
     color: Colors.neutral.mutedGray,
   },
   foodCard: {
-    flexDirection: "row",
-    alignItems: "center",
+    //flexDirection: "row",
+    //alignItems: "center",
     backgroundColor: Colors.neutral.cardSurface,
     borderRadius: 12,
     padding: 16,

@@ -1,20 +1,18 @@
-import { API_BASE } from "@/src/constants/api";
-import { auth } from "@/src/lib/auth";
 import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { getSavedFoods, removeSavedFood, SavedFoodRow } from "../../src/_api/savedFoods";
 
 interface Food {
   id: number;
@@ -25,11 +23,9 @@ interface Food {
   kcal?: number;
 }
 
-const SAVED_FOODS_KEY = "saved_foods";
-
 export default function AddSaved() {
   const router = useRouter();
-  const [savedFoods, setSavedFoods] = useState<Food[]>([]);
+  const [savedRows, setSavedRows] = useState<SavedFoodRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -40,78 +36,44 @@ export default function AddSaved() {
   const loadSavedFoods = async () => {
     setLoading(true);
     try {
-      // Load from local storage
-      const saved = await AsyncStorage.getItem(SAVED_FOODS_KEY);
-      if (saved) {
-        const foods = JSON.parse(saved);
-        setSavedFoods(foods);
-      } else {
-        // If no saved foods, try to get from recent meals
-        await loadFromRecentMeals();
-      }
+      const rows = await getSavedFoods();
+      setSavedRows(rows);
     } catch (error) {
       console.error("Failed to load saved foods:", error);
+      Alert.alert("Error", "Failed to load saved foods");
     } finally {
       setLoading(false);
     }
   };
 
-  const loadFromRecentMeals = async () => {
+  const handleRemove = async (savedId: number) => {
     try {
-      const token = await auth.getToken();
-      if (!token) return;
-
-      const today = new Date().toISOString().split("T")[0];
-      const response = await fetch(`${API_BASE}/meals?date=${today}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const meals = await response.json();
-        // Extract unique foods from recent meals
-        const foodsMap = new Map<string, Food>();
-        meals.forEach((meal: any) => {
-          meal.items.forEach((item: any) => {
-            if (!foodsMap.has(item.food.id)) {
-              foodsMap.set(item.food.id, item.food);
-            }
-          });
-        });
-        const foods = Array.from(foodsMap.values());
-        setSavedFoods(foods);
-        // Save to local storage
-        await AsyncStorage.setItem(SAVED_FOODS_KEY, JSON.stringify(foods));
-      }
+      await removeSavedFood(savedId);
+      setSavedRows((prev) => prev.filter((r) => r.id !== savedId));
     } catch (error) {
-      console.error("Failed to load from recent meals:", error);
+      Alert.alert("Error", "Failed to remove food");
     }
   };
 
   const handleAddFood = (food: Food) => {
-    Alert.alert(
-      "Add to Meal",
-      `Would you like to add "${food.name}" to your meal?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Add",
-          onPress: () => {
-            // Navigate to search screen with this food pre-selected
-            // For now, just show an alert
-            Alert.alert("Added!", `Adding ${food.name} to meal...`);
-            // TODO: Navigate to meal builder or add directly
-          },
+    Alert.alert("Add to Meal", `Would you like to add "${food.name}" to your meal?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Add",
+        onPress: () => {
+          Alert.alert("Added!", `Adding ${food.name} to meal...`);
         },
-      ]
-    );
+      },
+    ]);
   };
 
-  const filteredFoods = savedFoods.filter((food) =>
-    food.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (food.brand && food.brand.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredRows = savedRows.filter((row) => {
+    const food = row.food as Food;
+    return (
+      food.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (food.brand && food.brand.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  });
 
   if (loading) {
     return (
@@ -124,10 +86,14 @@ export default function AddSaved() {
 
   return (
     <View style={styles.container}>
-      {/* Search Header */}
       <View style={styles.searchHeader}>
         <View style={styles.searchContainer}>
-          <FontAwesome name="search" size={18} color={Colors.neutral.mutedGray} style={styles.searchIcon} />
+          <FontAwesome
+            name="search"
+            size={18}
+            color={Colors.neutral.mutedGray}
+            style={styles.searchIcon}
+          />
           <TextInput
             style={styles.searchInput}
             placeholder="Search saved foods..."
@@ -143,27 +109,23 @@ export default function AddSaved() {
         </View>
       </View>
 
-      {/* Content */}
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {savedFoods.length === 0 ? (
+        {savedRows.length === 0 ? (
           <View style={styles.emptyContainer}>
             <FontAwesome name="bookmark-o" size={64} color={Colors.neutral.mutedGray} />
             <Text style={styles.emptyTitle}>No Saved Foods Yet</Text>
             <Text style={styles.emptyText}>
               Your frequently used foods will appear here. Start by adding meals!
             </Text>
-            <TouchableOpacity
-              style={styles.emptyButton}
-              onPress={() => router.push("/search")}
-            >
+            <TouchableOpacity style={styles.emptyButton} onPress={() => router.push("/search")}>
               <Text style={styles.emptyButtonText}>Search Foods</Text>
             </TouchableOpacity>
           </View>
-        ) : filteredFoods.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <View style={styles.emptyContainer}>
             <FontAwesome name="search" size={64} color={Colors.neutral.mutedGray} />
             <Text style={styles.emptyTitle}>No Results</Text>
@@ -176,40 +138,47 @@ export default function AddSaved() {
             <View style={styles.header}>
               <Text style={styles.headerTitle}>Saved Foods</Text>
               <Text style={styles.headerSubtitle}>
-                {filteredFoods.length} food{filteredFoods.length !== 1 ? "s" : ""}
+                {filteredRows.length} food{filteredRows.length !== 1 ? "s" : ""}
               </Text>
             </View>
 
-            {filteredFoods.map((food) => (
-              <TouchableOpacity
-                key={food.id}
-                style={styles.foodCard}
-                onPress={() => handleAddFood(food)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.foodIcon}>
-                  <FontAwesome name="cutlery" size={20} color={Colors.primary.orange} />
-                </View>
-                <View style={styles.foodInfo}>
-                  <Text style={styles.foodName}>{food.name}</Text>
-                  {food.brand && (
-                    <Text style={styles.foodBrand}>{food.brand}</Text>
-                  )}
-                  {food.servingUnit && (
-                    <Text style={styles.foodServing}>
-                      {food.servingQty || 1} {food.servingUnit}
-                    </Text>
-                  )}
-                </View>
-                {food.kcal && (
-                  <View style={styles.calorieBadge}>
-                    <Text style={styles.calorieText}>{Math.round(food.kcal)}</Text>
-                    <Text style={styles.calorieUnit}>kcal</Text>
+            {filteredRows.map((row) => {
+              const food = row.food as Food;
+
+              return (
+                <TouchableOpacity
+                  key={row.id}
+                  style={styles.foodCard}
+                  onPress={() => handleAddFood(food)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.foodIcon}>
+                    <FontAwesome name="cutlery" size={20} color={Colors.primary.orange} />
                   </View>
-                )}
-                <FontAwesome name="plus-circle" size={24} color={Colors.primary.green} />
-              </TouchableOpacity>
-            ))}
+
+                  <View style={styles.foodInfo}>
+                    <Text style={styles.foodName}>{food.name}</Text>
+                    {food.brand && <Text style={styles.foodBrand}>{food.brand}</Text>}
+                    {food.servingUnit && (
+                      <Text style={styles.foodServing}>
+                        {food.servingQty || 1} {food.servingUnit}
+                      </Text>
+                    )}
+                  </View>
+
+                  {food.kcal ? (
+                    <View style={styles.calorieBadge}>
+                      <Text style={styles.calorieText}>{Math.round(food.kcal)}</Text>
+                      <Text style={styles.calorieUnit}>kcal</Text>
+                    </View>
+                  ) : null}
+
+                  <TouchableOpacity onPress={() => handleRemove(row.id)}>
+                    <FontAwesome name="trash" size={22} color={Colors.primary.orange} />
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              );
+            })}
           </>
         )}
       </ScrollView>
