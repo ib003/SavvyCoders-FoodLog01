@@ -8,6 +8,7 @@ const jwksClient = require("jwks-rsa");
 const { PrismaClient, Prisma } = require("@prisma/client");
 const prisma = new PrismaClient();
 const OpenAI = require("openai");
+const fetch = global.fetch || require("node-fetch");
 
 let openai = null;
 
@@ -64,7 +65,20 @@ async function verifyAppleToken(identityToken) {
 }
 
 const app = express();
-app.use(cors());
+app.set("trust proxy", 1);
+
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
+
+// SAFE preflight handler (doesn't crash like app.options("*"...))
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
 app.use(express.json({ limit: "60mb" }));
 
 function toFoodResponse(food) {
@@ -78,19 +92,24 @@ function toFoodResponse(food) {
 // bearer auth middleware
 function auth(req, res, next) {
   const h = req.headers.authorization || "";
-  const t = h.startsWith("Bearer ") ? h.slice(7) : "";
-  if (!t) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
+  const t = h.startsWith("Bearer ") ? h.slice(7).trim() : "";
+
+  console.log("[AUTH] header present:", !!h);
+  console.log("[AUTH] tokenLen:", t.length);
+  console.log("[AUTH] tokenPreview:", t ? `${t.slice(0, 20)}...${t.slice(-10)}` : "(none)");
+  console.log("[AUTH] hasDots:", t.includes("."));
+
+  if (!t) return res.status(401).json({ error: "unauthorized" });
+
   try {
     const decoded = jwt.verify(t, process.env.JWT_SECRET || "fallback-secret-key");
-    req.userId = decoded.userId; // Use userId consistently
-    next();
+    req.userId = decoded.userId;
+    return next();
   } catch (error) {
+    console.log("[AUTH] verify failed:", error.message);
     return res.status(401).json({ error: "unauthorized" });
   }
 }
-
 // --- Auth ---
 app.post("/auth/register", async (req, res) => {
   try {
@@ -998,6 +1017,9 @@ app.put("/user/preferences", auth, async (req, res) => {
 });
 app.get("/health", (req, res) => {
   res.status(200).json({ ok: true });
+});
+app.get("/", (req, res) => {
+  res.status(200).send("SavvyTrack API OK");
 });
 async function resolveFoodId(input) {
   const rawId = input?.foodId ?? input?.food_id ?? input?.id ?? null;
