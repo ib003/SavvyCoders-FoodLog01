@@ -112,54 +112,59 @@ export default function DashboardScreen() {
   };
 
   const loadTodayMeals = async () => {
-    try {
-      const token = await auth.getToken();
-      if (!token) return;
+  try {
+    const token = await auth.getToken();
+    if (!token) return;
 
-      const today = new Date().toISOString().split("T")[0];
-      const url = `${API_BASE}/meals?date=${today}`;
-      console.log("[Meals] GET:", url);
-      console.log("[Meals] tokenLen:", token?.length);
-      console.log("[Meals] authHeader:", `Bearer ${token}`.slice(0, 25) + "...");
+        const today = new Date().toISOString().split("T")[0];
+    const url = `${API_BASE}/meals?date=${today}`;
+    console.log("[Meals] GET:", url);
+    console.log("[Meals] tokenLen:", token?.length);
+    console.log("[Meals] authHeader:", `Bearer ${token}`.slice(0, 25) + "...");
 
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-      console.log("[Meals] status:", response.status);
+    console.log("[Meals] status:", response.status);
 
-      if (!response.ok) {
-        const txt = await response.text().catch(() => "");
-        console.log("[Meals] body:", txt.slice(0, 200));
-        throw new Error(`Meals fetch failed: ${response.status}`);
-      }
-
-      const raw = await response.json();
-      console.log("[Dashboard] raw meals =", JSON.stringify(raw?.[0], null, 2));
-      console.log("[Dashboard] raw first item =", JSON.stringify(raw?.[0]?.items?.[0], null, 2));
-
-      const normalized: Meal[] = (raw || []).map((m: any) => ({
-        id: String(m.id),
-        mealType: m.mealType ?? m.meal_type ?? "UNKNOWN",
-        occurredAt: m.dateTime ?? m.occurredAt ?? m.occurred_at ?? new Date().toISOString(),
-        items: (m.items || []).map((it: any) => ({
-          qty: Number(it.qty ?? 1),
-          kcal: Number(it.kcal ?? it.calories) || null,
-          food: {
-            id: String(it.food?.id ?? it.foodId ?? it.food_id ?? "unknown"),
-            name: it.food?.name ?? it.name ?? "Unknown food",
-            brand: it.food?.brand ?? it.brand,
-            kcal: Number(it.kcal ?? it.food?.kcal) || null,
-          },
-        })),
-      }));
-
-      setTodayMeals(normalized);
-      await checkAlerts(normalized);
-    } catch (error) {
-      console.error("Failed to load meals:", error);
+    if (!response.ok) {
+      const txt = await response.text().catch(() => "");
+      console.log("[Meals] body:", txt.slice(0, 200));
+      throw new Error(`Meals fetch failed: ${response.status}`);
     }
-  };
+
+    const raw = await response.json();
+
+    console.log("[Dashboard] raw meals =", JSON.stringify(raw));
+    console.log("[Dashboard] raw first item =", JSON.stringify(raw?.[0]));
+
+    const normalized: Meal[] = (raw || []).map((m: any) => ({
+      id: String(m.id),
+      mealType: m.mealType ?? m.meal_type ?? "UNKNOWN",
+      occurredAt:
+        m.dateTime ??
+        m.occurredAt ??
+        m.occurred_at ??
+        new Date().toISOString(),
+      items: (m.items || []).map((it: any) => ({
+        qty: Number(it.qty ?? it.quantity ?? 1),
+        kcal: Number(it.kcal ?? it.calories ?? it.food?.kcal ?? it.food?.calories) || null,
+        food: {
+          id: String(it.food?.id ?? it.foodId ?? it.food_id ?? "unknown"),
+          name: it.food?.name ?? it.name ?? "Unknown food",
+          brand: it.food?.brand ?? it.brand,
+          kcal: Number(it.food?.kcal ?? it.food?.calories ?? it.kcal ?? it.calories ?? 0) || 0,
+        },
+      })),
+    }));
+
+    setTodayMeals(normalized);
+    await checkAlerts(normalized);
+  } catch (error) {
+    console.error("Failed to load meals:", error);
+  }
+};
 
   const checkAlerts = async (meals: Meal[]) => {
     const userPrefs = await preferences.fetch();
