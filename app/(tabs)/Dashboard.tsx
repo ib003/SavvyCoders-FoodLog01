@@ -64,7 +64,7 @@ export default function DashboardScreen() {
         router.replace("/");
         return;
       }
-      loadDashboardData();
+      await loadDashboardData();
     };
     checkAuthAndLoad();
   }, []);
@@ -88,26 +88,35 @@ export default function DashboardScreen() {
   };
 
   const loadTodayMeals = async () => {
-    try {
-      const token = await auth.getToken();
-      if (!token) return;
+  try {
+    const token = await auth.getToken();
+    if (!token) return;
 
-      const today = new Date().toISOString().split("T")[0];
-      const response = await fetch(`${API_BASE}/meals?date=${today}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+    const today = new Date().toISOString().split("T")[0];
+    const url = `${API_BASE}/meals?date=${today}`;
+    console.log("[Meals] GET:", url);
+    console.log("[Meals] tokenLen:", token?.length);
+console.log("[Meals] authHeader:", `Bearer ${token}`.slice(0, 25) + "...");
 
-      if (response.ok) {
-        const meals = await response.json();
-        setTodayMeals(meals);
-        await checkAlerts(meals);
-      }
-    } catch (error) {
-      console.error("Failed to load meals:", error);
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    console.log("[Meals] status:", response.status);
+
+    if (!response.ok) {
+      const txt = await response.text().catch(() => "");
+      console.log("[Meals] body:", txt.slice(0, 200));
+      throw new Error(`Meals fetch failed: ${response.status}`);
     }
-  };
+
+    const meals = await response.json();
+    setTodayMeals(meals);
+    await checkAlerts(meals);
+  } catch (error) {
+    console.error("Failed to load meals:", error);
+  }
+};
 
   const checkAlerts = async (meals: Meal[]) => {
     const userPrefs = await preferences.fetch();

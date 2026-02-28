@@ -21,7 +21,7 @@ import {
 } from "react-native";
 
 interface Food {
-  id: string;
+  id: number;
   name: string;
   brand?: string;
   servingUnit?: string;
@@ -118,21 +118,26 @@ export default function AddBarcode() {
       }
 
       const now = new Date();
-      const response = await fetch(`${API_BASE}/meals`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          occurred_at: now.toISOString(),
-          meal_type: "snack",
-          items: [{
-            food_id: food.id,
-            qty: parseFloat(quantity) || 1,
-          }],
-        }),
-      });
+const url = `${API_BASE}/meals`;
+console.log("[Meals] POST:", url);
+
+const response = await fetch(url, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    occurred_at: now.toISOString(),
+    meal_type: "snack",
+    items: [
+      {
+        food_id: food.id,
+        qty: parseFloat(quantity) || 1,
+      },
+    ],
+  }),
+});
 
       if (response.ok) {
         Alert.alert(
