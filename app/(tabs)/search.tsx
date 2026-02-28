@@ -155,11 +155,17 @@ export default function AddSearch() {
     }
 
     try {
-      const token = await auth.getToken();
-      if (!token) {
-        Alert.alert("Not Authenticated", "Please log in to save meals.");
-        return;
-      }
+      const rawToken = await auth.getToken(); 
+const token = rawToken?.replace(/^Bearer\s+/i, ""); 
+
+console.log("[SaveMeal] raw token =", rawToken);
+console.log("[SaveMeal] cleaned token =", token);
+console.log("[SaveMeal] auth header =", `Bearer ${token}`);
+
+if (!token) {
+  Alert.alert("Not Authenticated", "Please log in to save meals.");
+  return;
+}
 
       const now = new Date();
       const response = await fetch(`${API_BASE}/meals`, {
@@ -176,11 +182,16 @@ export default function AddSearch() {
           externalId: item.food.externalId ?? null,   //allow server to resolve/create
           name: item.food.name,
           brand: item.food.brand ?? null,
-          kcal: item.food.kcal ?? null,
+          kcal: getFoodKcal(item.food) || null,
           qty: item.qty,
           })),
         }),
       });
+      if (response.status === 401) {
+  Alert.alert("Session expired", "Please log in again.");
+  router.replace("/");
+  return;
+}
 
       if (response.ok) {
         Alert.alert(

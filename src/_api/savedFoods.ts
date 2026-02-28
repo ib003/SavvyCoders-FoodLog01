@@ -3,8 +3,7 @@ import { API_BASE } from "../../constants/api";
 
 // Slight tweak: allow null instead of throwing immediately
 async function readToken(): Promise<string | null> {
-  const t = await AsyncStorage.getItem("token");
-  return t ?? null; // return null instead of throwing
+ return await AsyncStorage.getItem("token");
 }
 
 export type SavedFoodRow = {
@@ -27,14 +26,10 @@ export async function getSavedFoods(): Promise<SavedFoodRow[]> {
   return res.json();
 }
 
-export async function saveFood(
-  food: any
-): Promise<{ id: number; food: any } | null> {
+export async function saveFood(food: any): Promise<{ id: number; food: any }> {
   const token = await readToken();
 
-  // Don't crash app — just return null if no token
-  if (!token) return null;
-
+  if (!token) throw new Error("No token");
   const res = await fetch(`${API_BASE}/saved-foods`, {
     method: "POST",
     headers: {
@@ -54,7 +49,7 @@ export async function removeSavedFood(
   const token = await readToken();
 
   // Same here — prevent unnecessary error popup
-  if (!token) return null;
+   if (!token) throw new Error("No token");
 
   const res = await fetch(`${API_BASE}/saved-foods/${savedId}`, {
     method: "DELETE",
