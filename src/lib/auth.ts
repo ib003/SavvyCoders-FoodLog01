@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const BASE_URL = "http://192.168.4.35:3000";
+import { API_BASE } from "@/src/constants/api";
+const BASE_URL = API_BASE;
+
 
 // Add this helper function at the top of the file
 const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 3000): Promise<Response> => {

@@ -1,8 +1,8 @@
+import { Theme } from '@/constants/Theme';
+import { useShake } from '@/src/ui/animations';
 import { FontAwesome } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
-import { Theme } from '@/constants/Theme';
-import { useShake } from '@/src/ui/animations';
 
 interface TextFieldProps extends TextInputProps {
   label?: string;
@@ -40,7 +40,7 @@ export function TextField({
         Animated.timing(glowOpacityAnim, {
           toValue: 0.3,
           duration: 200,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]).start();
     } else {
@@ -53,7 +53,7 @@ export function TextField({
         Animated.timing(glowOpacityAnim, {
           toValue: 0,
           duration: 200,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]).start();
     }
