@@ -50,11 +50,12 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const segments = useSegments();
+  const segs = Array.isArray(segments) ? segments : [];
 
   // Root-level auth guard - single source of truth
   useEffect(() => {
     let mounted = true;
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     (async () => {
       try {
@@ -64,25 +65,25 @@ function RootLayoutNav() {
         if (!mounted) return;
 
         const token = await auth.getToken();
-        const inAuthGroup = segments[0] === '(tabs)';
+        const inAuthGroup = segs[0] === '(tabs)';
         const hasValidToken = token && typeof token === 'string' && token.length >= 20;
+        
 
         console.log('[RootLayout] Auth check:', {
           hasToken: !!token,
           tokenLength: token?.length || 0,
           inAuthGroup,
           hasValidToken,
-          segments: segments.join('/'),
+          segments: segs.join('/'),
         });
 
         // Only redirect if we're actually navigating (not on initial load)
-        const isInitialLoad = segments.length === 0 || (segments.length === 1 && segments[0] === 'index');
-        
+       const isInitialLoad = segs.length === 0;
         if (!hasValidToken && inAuthGroup) {
           // User is in protected area but has no token - redirect to login
           console.log('[RootLayout] No valid token in protected area, redirecting to login');
           router.replace('/');
-        } else if (hasValidToken && !inAuthGroup && segments[0] !== 'register' && !isInitialLoad) {
+        } else if (hasValidToken && !inAuthGroup && segs[0] !== 'register' && !isInitialLoad) {
           // User has token but is on login screen - redirect to tabs
           // But only if not on initial load (to prevent redirect loops)
           console.log('[RootLayout] Valid token found, redirecting to tabs');
@@ -95,7 +96,7 @@ function RootLayoutNav() {
       } catch (error) {
         console.error('[RootLayout] Auth guard error:', error);
         // On error, redirect to login for safety
-        if (mounted && segments[0] === '(tabs)') {
+        if (mounted && segs[0] === '(tabs)') {
           router.replace('/');
         }
       }
@@ -103,11 +104,10 @@ function RootLayoutNav() {
 
     return () => {
       mounted = false;
-      if (timeoutId) {
+      if (timeoutId) 
         clearTimeout(timeoutId);
-      }
     };
-  }, [segments]);
+  }, [segs.join("/")]); 
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

@@ -1056,6 +1056,143 @@ app.put("/user/preferences", auth, async (req, res) => {
 app.get("/health", (req, res) => {
   res.status(200).json({ ok: true });
 });
+async function resolveFoodId(input) {
+  const rawId = input?.foodId ?? input?.food_id ?? input?.id ?? null;
+  if (rawId != null && Number.isFinite(Number(rawId))) return Number(rawId);
+
+  const externalId = input?.externalId ?? input?.external_id ?? null;
+  const barcode = input?.barcode ?? null;
+  const name = input?.name ?? null;
+
+  if (barcode) {
+    let food = await prisma.food.findUnique({ where: { barcode: String(barcode) } });
+    if (!food) {
+      food = await prisma.food.create({
+        data: {
+          name: name || `Product ${barcode}`,
+          brand: input?.brand ?? null,
+          calories: input?.kcal ?? input?.calories ?? null,
+          servingSize: input?.servingSize ?? input?.servingQty ?? null,
+          servingUnit: input?.servingUnit ?? null,
+          barcode: String(barcode),
+          imageUrl: input?.imageUrl ?? input?.image_url ?? null,
+          source: input?.source ?? "UPC_API",
+          externalId: externalId ? String(externalId) : null,
+        },
+      });
+    }
+    return food.id;
+  }
+
+  if (externalId) {
+    let food = await prisma.food.findFirst({
+      where: {
+        externalId: String(externalId),
+        ...(input?.source ? { source: input.source } : {}),
+      },
+    });
+
+    if (!food) {
+      food = await prisma.food.create({
+        data: {
+          name: name || `Food ${externalId}`,
+          brand: input?.brand ?? null,
+          calories: input?.kcal ?? input?.calories ?? null,
+          servingSize: input?.servingSize ?? input?.servingQty ?? null,
+          servingUnit: input?.servingUnit ?? null,
+          imageUrl: input?.imageUrl ?? null,
+          source: input?.source ?? "UPC_API",
+          externalId: String(externalId),
+        },
+      });
+    }
+    return food.id;
+  }
+
+  if (name) {
+    let food = await prisma.food.findFirst({
+      where: {
+        name: { equals: String(name), mode: "insensitive" },
+        ...(input?.brand
+          ? { brand: { equals: String(input.brand), mode: "insensitive" } }
+          : {}),
+      },
+    });
+
+    if (!food) {
+      food = await prisma.food.create({
+        data: {
+          name: String(name),
+          brand: input?.brand ?? null,
+          calories: input?.kcal ?? input?.calories ?? null,
+          servingSize: input?.servingSize ?? input?.servingQty ?? null,
+          servingUnit: input?.servingUnit ?? null,
+          imageUrl: input?.imageUrl ?? null,
+          source: input?.source ?? "UPC_API",
+          externalId: null,
+        },
+      });
+    }
+    return food.id;
+  }
+
+  throw new Error("Missing food identifier");
+}
+
+app.get("/saved-foods", auth, async (req, res) => {
+  try {
+    const rows = await prisma.savedFood.findMany({
+      where: { userId: req.userId },
+      include: { food: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json(
+      rows.map((r) => ({
+        id: r.id,
+        createdAt: r.createdAt,
+        food: toFoodResponse(r.food),
+      }))
+    );
+  } catch (e) {
+    res.status(500).json({ error: "failed_to_load_saved_foods" });
+  }
+});
+
+app.post("/saved-foods", auth, async (req, res) => {
+  try {
+    const foodId = await resolveFoodId(req.body);
+
+    const saved = await prisma.savedFood.upsert({
+      where: { userId_foodId: { userId: req.userId, foodId } },
+      update: {},
+      create: { userId: req.userId, foodId },
+      include: { food: true },
+    });
+
+    res.json({ id: saved.id, food: toFoodResponse(saved.food) });
+  } catch (e) {
+    res.status(400).json({ error: "failed_to_save_food", message: e.message });
+  }
+});
+
+app.delete("/saved-foods/:id", auth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
+
+    const row = await prisma.savedFood.findFirst({
+      where: { id, userId: req.userId },
+      select: { id: true },
+    });
+    if (!row) return res.status(404).json({ error: "not_found" });
+
+    await prisma.savedFood.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: "failed_to_delete_saved_food" });
+  }
+});
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`API running on http://0.0.0.0:${PORT}`);

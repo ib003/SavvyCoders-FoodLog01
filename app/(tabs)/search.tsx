@@ -1,5 +1,6 @@
 import AllergenWarning from "@/components/AllergenWarning";
 import { Colors } from "@/constants/Colors";
+import { saveFood } from "@/src/_api/savedFoods";
 import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
 import { auth } from "@/src/lib/auth";
@@ -72,6 +73,50 @@ export default function AddSearch() {
 
     return () => clearTimeout(delayDebounce);
   }, [searchQuery, searchFoods]);
+  const getFoodKcal = (food: Food | null | undefined) => {
+    const v = Number((food as any)?.kcal ?? (food as any)?.calories ?? (food as any)?.energyKcal);
+    return Number.isFinite(v) ? v : 0;
+  };
+
+  const getFoodKcalForQty = (food: Food, qty: number) => {
+    const baseKcal = getFoodKcal(food);
+
+    // If servingUnit is grams and servingQty exists (often "100 g"),
+    // scale calories proportionally. Otherwise treat qty as "servings".
+    const unit = String(food.servingUnit ?? "").toLowerCase();
+    const baseQty = Number(food.servingQty);
+
+    const looksLikeGrams = unit === "g" || unit.includes("gram");
+    if (looksLikeGrams && Number.isFinite(baseQty) && baseQty > 0) {
+      return baseKcal * (qty / baseQty);
+    }
+
+    return baseKcal * qty;
+  };
+  const handleSaveFood = async (food: Food) => {
+  try {
+    const result = await saveFood({
+      foodId: food.id,
+      id: food.id,
+      externalId: food.externalId ?? null,
+      barcode: (food as any).barcode ?? null,
+      name: food.name,
+      brand: food.brand ?? null,
+      kcal: getFoodKcal(food),
+      servingQty: food.servingQty ?? null,
+      servingUnit: food.servingUnit ?? null,
+      imageUrl: (food as any).imageUrl ?? null,
+      source: (food as any).source ?? "UPC_API",
+    });
+     if (!result) {
+      Alert.alert("Login required", "Please log in to save foods 🔒");
+      return;
+    }
+    Alert.alert("Saved", `${food.name} saved`);
+  } catch (e: any) {
+    Alert.alert("Error", e?.message || "Failed to save");
+  }
+};
 
   const handleFoodSelect = async (food: Food) => {
     setSelectedFood(food);
@@ -102,7 +147,7 @@ export default function AddSearch() {
     const newItems = mealItems.filter((_, i) => i !== index);
     setMealItems(newItems);
   };
-
+ 
   const handleSaveMeal = async () => {
     if (mealItems.length === 0) {
       Alert.alert("Empty Meal", "Please add at least one food item to your meal.");
@@ -110,11 +155,17 @@ export default function AddSearch() {
     }
 
     try {
-      const token = await auth.getToken();
-      if (!token) {
-        Alert.alert("Not Authenticated", "Please log in to save meals.");
-        return;
-      }
+      const rawToken = await auth.getToken(); 
+const token = rawToken?.replace(/^Bearer\s+/i, ""); 
+
+console.log("[SaveMeal] raw token =", rawToken);
+console.log("[SaveMeal] cleaned token =", token);
+console.log("[SaveMeal] auth header =", `Bearer ${token}`);
+
+if (!token) {
+  Alert.alert("Not Authenticated", "Please log in to save meals.");
+  return;
+}
 
       const now = new Date();
       const response = await fetch(`${API_BASE}/meals`, {
@@ -131,11 +182,16 @@ export default function AddSearch() {
           externalId: item.food.externalId ?? null,   //allow server to resolve/create
           name: item.food.name,
           brand: item.food.brand ?? null,
-          kcal: item.food.kcal ?? null,
+          kcal: getFoodKcal(item.food) || null,
           qty: item.qty,
           })),
         }),
       });
+      if (response.status === 401) {
+  Alert.alert("Session expired", "Please log in again.");
+  router.replace("/");
+  return;
+}
 
       if (response.ok) {
         Alert.alert(
@@ -161,26 +217,7 @@ export default function AddSearch() {
     }
   };
 
-    const getFoodKcal = (food: Food | null | undefined) => {
-    const v = Number((food as any)?.kcal ?? (food as any)?.calories ?? (food as any)?.energyKcal);
-    return Number.isFinite(v) ? v : 0;
-  };
-
-  const getFoodKcalForQty = (food: Food, qty: number) => {
-    const baseKcal = getFoodKcal(food);
-
-    // If servingUnit is grams and servingQty exists (often "100 g"),
-    // scale calories proportionally. Otherwise treat qty as "servings".
-    const unit = String(food.servingUnit ?? "").toLowerCase();
-    const baseQty = Number(food.servingQty);
-
-    const looksLikeGrams = unit === "g" || unit.includes("gram");
-    if (looksLikeGrams && Number.isFinite(baseQty) && baseQty > 0) {
-      return baseKcal * (qty / baseQty);
-    }
-
-    return baseKcal * qty;
-  };
+   
 
   const getTotalCalories = () => {
     return mealItems.reduce((sum, item) => {
@@ -286,37 +323,45 @@ export default function AddSearch() {
           const servingUnit = String(food.servingUnit ?? "").trim();
 
           return (
-            <TouchableOpacity
-              key={key}
-              style={styles.foodCard}
-              onPress={() => handleFoodSelect(food)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.foodCardContent}>
-                <View style={styles.foodInfo}>
-                  <Text style={styles.foodName}>{food.name}</Text>
-                  {!!food.brand && <Text style={styles.foodBrand}>{food.brand}</Text>}
-                  {servingUnit ? (
-                    <Text style={styles.foodServing}>
-                      {Number.isFinite(servingQty) && servingQty > 0 ? servingQty : 1} {servingUnit}
-                    </Text>
-                  ) : (
-                    <Text style={styles.foodServing}>1 serving</Text>
-                  )}
-                </View>
+  <TouchableOpacity
+    key={key}
+    style={styles.foodCard}
+    onPress={() => handleFoodSelect(food)}
+    activeOpacity={0.7}
+  >
+    <View style={styles.foodCardContent}>
+      <View style={styles.foodInfo}>
+        <Text style={styles.foodName}>{food.name}</Text>
+        {!!food.brand && <Text style={styles.foodBrand}>{food.brand}</Text>}
+        {servingUnit ? (
+          <Text style={styles.foodServing}>
+            {Number.isFinite(servingQty) && servingQty > 0 ? servingQty : 1} {servingUnit}
+          </Text>
+        ) : (
+          <Text style={styles.foodServing}>1 serving</Text>
+        )}
+      </View>
 
-                {kcalVal > 0 && (
-                  <View style={styles.calorieBadge}>
-                    <Text style={styles.calorieText}>{Math.round(kcalVal)}</Text>
-                    <Text style={styles.calorieUnit}>kcal</Text>
-                  </View>
-                )}
-              </View>
+      {kcalVal > 0 && (
+        <View style={styles.calorieBadge}>
+          <Text style={styles.calorieText}>{Math.round(kcalVal)}</Text>
+          <Text style={styles.calorieUnit}>kcal</Text>
+        </View>
+      )}
+    </View>
 
-              <FontAwesome name="plus-circle" size={24} color={Colors.primary.green} />
-            </TouchableOpacity>
-          );
-        })}
+    <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 10 }}>
+      <TouchableOpacity
+        onPress={(e) => {
+          e.stopPropagation();
+          handleSaveFood(food);
+        }}
+      >
+        <FontAwesome name="bookmark" size={22} color={Colors.primary.orange} />
+      </TouchableOpacity>
+    </View>
+  </TouchableOpacity>
+); })} 
       </ScrollView>
 
       {/* Quantity Modal */}
@@ -512,8 +557,8 @@ const styles = StyleSheet.create({
     color: Colors.neutral.mutedGray,
   },
   foodCard: {
-    flexDirection: "row",
-    alignItems: "center",
+    //flexDirection: "row",
+    //alignItems: "center",
     backgroundColor: Colors.neutral.cardSurface,
     borderRadius: 12,
     padding: 16,
