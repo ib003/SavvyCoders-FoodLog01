@@ -10,8 +10,8 @@ import { Symptom, symptoms } from "@/src/lib/symptoms";
 import { useFadeIn, useStagger } from "@/src/ui/animations";
 import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, usePathname, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Animated, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface Meal {
@@ -43,11 +43,14 @@ interface AlertItem {
 
 export default function DashboardScreen() {
   const router = useRouter();
+  const pathname = usePathname();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [todayMeals, setTodayMeals] = useState<Meal[]>([]);
   const [todaySymptoms, setTodaySymptoms] = useState<Symptom[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const isInitialMount = useRef(true);
+  const previousPath = useRef(pathname);
 
   // Animations - use max count to avoid re-renders
   const emptyStateOpacity = useFadeIn(400, 200);
@@ -67,12 +70,32 @@ export default function DashboardScreen() {
       loadDashboardData();
     };
     checkAuthAndLoad();
+    isInitialMount.current = false;
   }, []);
+
+  // Track pathname changes to detect modal navigation
+  useEffect(() => {
+    previousPath.current = pathname;
+  }, [pathname]);
 
   useFocusEffect(
     useCallback(() => {
-      loadTodaySymptoms();
-    }, [])
+      // Skip reload if this is the initial mount
+      if (isInitialMount.current) {
+        return;
+      }
+      
+      // Skip reload if we're coming back from a modal route
+      // Modal routes like /chat don't change the pathname of the tabs
+      // So we only reload when actually switching between tabs
+      const currentPath = pathname;
+      const isComingFromModal = currentPath === previousPath.current;
+      
+      if (!isComingFromModal) {
+        // Only reload when switching tabs, not when closing modals
+        loadTodaySymptoms();
+      }
+    }, [pathname])
   );
 
   const loadDashboardData = async () => {
