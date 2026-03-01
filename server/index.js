@@ -118,7 +118,7 @@ app.post("/auth/register", async (req, res) => {
           email: normalizedEmail, 
           passwordHash: passwordHash,
           googleSub: null,
-          appleSub: null,
+          //appleSub: null,
         },
         select: {
           id: true,
@@ -268,7 +268,7 @@ app.post("/auth/google", async (req, res) => {
           googleSub: googleSub,
           name: name || undefined,
           passwordHash: null,
-          appleSub: null,
+          //appleSub: null,
         },
         select: {
           id: true,

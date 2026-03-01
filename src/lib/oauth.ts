@@ -38,15 +38,12 @@ export async function signInWithGoogle(): Promise<OAuthResult> {
 
     console.log("[Google OAuth] Client ID configured, creating auth request...");
 
-    // Force http://localhost for Google OAuth (Google requires HTTP/HTTPS, not exp:// schemes)
-    // Expo proxy will handle the redirect through localhost
-    const redirectUri = "http://localhost";
-    
-    console.log("[Google OAuth] Using redirect URI:", redirectUri);
-    console.log("[Google OAuth] ⚠️ CRITICAL: Make sure 'http://localhost' is in Google Cloud Console");
-    console.log("[Google OAuth] Go to: APIs & Services → Credentials → Your OAuth Client");
-    console.log("[Google OAuth] Under 'Authorized redirect URIs', add EXACTLY: http://localhost");
-    console.log("[Google OAuth] (No port, no path, no trailing slash - just 'http://localhost')");
+// Use Expo AuthSession proxy redirect (HTTPS) — required for Google in Expo Go
+const redirectUri = AuthSession.makeRedirectUri({
+  scheme: "savvytrackertabs",
+  path: "redirect",
+});
+console.log("[Google OAuth] Using redirect URI:", redirectUri);
 
     // Configure Google OAuth discovery
     const discovery = {
@@ -70,36 +67,21 @@ export async function signInWithGoogle(): Promise<OAuthResult> {
     console.log("[Google OAuth] 2. Are signed in with a test user email");
     console.log("[Google OAuth] 3. Have added the redirect URI to Google Cloud Console");
     
-    const result = await request.promptAsync(discovery);
+const result = await request.promptAsync(discovery);
+console.log("[Google OAuth] Auth result type:", result.type);
+console.log("[Google OAuth] Full result:", JSON.stringify(result, null, 2));
 
-    console.log("[Google OAuth] Auth result type:", result.type);
-    console.log("[Google OAuth] Full result:", JSON.stringify(result, null, 2));
+if (result.type !== "success") {
+  const error =
+    result.type === "cancel" ? "Sign in cancelled" : `Google sign-in failed: ${result.type}`;
+  console.error("[Google OAuth] Error:", error);
+  return { success: false, error };
+}
 
-    if (result.type !== "success") {
-      const error = result.type === "cancel" 
-        ? "Sign in cancelled" 
-        : `Google sign-in failed: ${result.type}`;
-      console.error("[Google OAuth] Error:", error);
-      if (result.type === "cancel") {
-        console.log("[Google OAuth] Make sure you complete the Google sign-in flow in the browser");
-      }
-      return {
-        success: false,
-        error,
-      };
-    }
-
-    const { id_token } = result.params;
-    
-    if (!id_token) {
-      const error = "No ID token received from Google";
-      console.error("[Google OAuth] Error:", error);
-      console.error("[Google OAuth] Result params:", JSON.stringify(result.params, null, 2));
-      return {
-        success: false,
-        error,
-      };
-    }
+const id_token = (result.params as any)?.id_token;
+if (!id_token) {
+  return { success: false, error: "No ID token received from Google" };
+}
 
     console.log("[Google OAuth] ID token received, sending to backend...");
 

@@ -23,13 +23,14 @@ model User {
   isVerified         Boolean             @default(false)
   acceptedTermsAt    DateTime?
   googleSub          String?             @unique
+  appleSub String? @unique
   photoUrl           String?
   meals              Meal[]
   symptomLogs        SymptomLog[]
   allergies          UserAllergy[]
-   savedFoods         SavedFood[]  
   UserPreferences    UserPreferences?
   verificationTokens VerificationToken[]
+  
 }
 
 model Allergy {
@@ -74,7 +75,6 @@ model Food {
   updatedAt   DateTime       @updatedAt
   allergens   FoodAllergen[]
   mealItems   MealItem[]
-  savedBy     SavedFood[] 
 
   @@index([brand])
   @@index([name])
@@ -188,17 +188,4 @@ enum MealType {
 enum VerificationTokenType {
   EMAIL_VERIFY
   PASSWORD_RESET
-}
-model SavedFood {
-  id        Int      @id @default(autoincrement())
-  userId    String
-  foodId    Int
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  food Food @relation(fields: [foodId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, foodId], name: "userId_foodId")
-  @@index([userId])
-  @@index([foodId])
 }
