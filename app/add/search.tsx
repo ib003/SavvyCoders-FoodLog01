@@ -3,6 +3,7 @@ import { analyzeFood } from "@/src/lib/allergenChecker";
 import { auth } from "@/src/lib/auth";
 import AllergenWarning from "@/components/AllergenWarning";
 import { Colors } from "@/constants/Colors";
+import { Theme } from "@/constants/Theme";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -382,7 +383,7 @@ const styles = StyleSheet.create({
   },
   searchHeader: {
     backgroundColor: Colors.neutral.cardSurface,
-    padding: 16,
+    padding: Theme.spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
@@ -390,14 +391,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.neutral.backgroundLight,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: Theme.radius.md,
+    paddingHorizontal: Theme.spacing.lg,
+    paddingVertical: Theme.spacing.md,
     borderWidth: 1,
     borderColor: "#E0E0E0",
   },
   searchIcon: {
-    marginRight: 12,
+    marginRight: Theme.spacing.md,
   },
   searchInput: {
     flex: 1,
@@ -406,7 +407,7 @@ const styles = StyleSheet.create({
   },
   mealSummary: {
     backgroundColor: Colors.primary.green,
-    padding: 12,
+    padding: Theme.spacing.md,
   },
   summaryContent: {
     flexDirection: "row",
@@ -420,9 +421,9 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: "#FFFFFF",
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: Theme.spacing.xl,
+    paddingVertical: Theme.spacing.sm,
+    borderRadius: Theme.radius.xl,
   },
   saveButtonText: {
     color: Colors.primary.green,
@@ -436,21 +437,21 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F0F0F0",
   },
   mealItemsContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
+    paddingHorizontal: Theme.spacing.lg,
+    paddingVertical: Theme.spacing.md,
+    gap: Theme.spacing.sm,
   },
   mealItemChip: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.neutral.backgroundLight,
-    borderRadius: 16,
-    paddingHorizontal: 12,
+    borderRadius: Theme.radius.lg,
+    paddingHorizontal: Theme.spacing.md,
     paddingVertical: 6,
-    marginRight: 8,
+    marginRight: Theme.spacing.sm,
     borderWidth: 1,
     borderColor: "#E0E0E0",
-    gap: 8,
+    gap: Theme.spacing.sm,
   },
   mealItemName: {
     fontSize: 13,
@@ -462,7 +463,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   resultsContent: {
-    padding: 16,
+    padding: Theme.spacing.lg,
   },
   centerContainer: {
     flex: 1,
@@ -471,18 +472,18 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   loadingText: {
-    marginTop: 16,
+    marginTop: Theme.spacing.lg,
     fontSize: 14,
     color: Colors.neutral.mutedGray,
   },
   emptyText: {
-    marginTop: 16,
+    marginTop: Theme.spacing.lg,
     fontSize: 18,
     fontWeight: "600",
     color: Colors.neutral.textDark,
   },
   emptySubtext: {
-    marginTop: 8,
+    marginTop: Theme.spacing.sm,
     fontSize: 14,
     color: Colors.neutral.mutedGray,
   },
@@ -490,9 +491,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.neutral.cardSurface,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: Theme.radius.md,
+    padding: Theme.spacing.lg,
+    marginBottom: Theme.spacing.md,
     borderWidth: 1,
     borderColor: "#F0F0F0",
     shadowColor: "#000",
@@ -505,7 +506,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: Theme.spacing.md,
   },
   foodInfo: {
     flex: 1,
@@ -514,12 +515,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: Colors.neutral.textDark,
-    marginBottom: 4,
+    marginBottom: Theme.spacing.xs,
   },
   foodBrand: {
     fontSize: 13,
     color: Colors.neutral.mutedGray,
-    marginBottom: 4,
+    marginBottom: Theme.spacing.xs,
   },
   foodServing: {
     fontSize: 12,
@@ -528,10 +529,10 @@ const styles = StyleSheet.create({
   calorieBadge: {
     alignItems: "center",
     backgroundColor: `${Colors.primary.green}15`,
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderRadius: Theme.radius.sm,
+    paddingHorizontal: Theme.spacing.md,
     paddingVertical: 6,
-    marginLeft: 12,
+    marginLeft: Theme.spacing.md,
   },
   calorieText: {
     fontSize: 16,
@@ -550,54 +551,54 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: Colors.neutral.cardSurface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
+    borderTopLeftRadius: Theme.radius["2xl"],
+    borderTopRightRadius: Theme.radius["2xl"],
+    padding: Theme.spacing["2xl"],
     maxHeight: "80%",
   },
   modalHeader: {
-    marginBottom: 20,
+    marginBottom: Theme.spacing.xl,
   },
   modalTitle: {
     fontSize: 22,
     fontWeight: "800",
     color: Colors.neutral.textDark,
-    marginBottom: 4,
+    marginBottom: Theme.spacing.xs,
   },
   modalBrand: {
     fontSize: 14,
     color: Colors.neutral.mutedGray,
   },
   quantityContainer: {
-    marginBottom: 20,
+    marginBottom: Theme.spacing.xl,
   },
   quantityLabel: {
     fontSize: 14,
     fontWeight: "600",
     color: Colors.neutral.textDark,
-    marginBottom: 8,
+    marginBottom: Theme.spacing.sm,
   },
   quantityInput: {
     backgroundColor: Colors.neutral.backgroundLight,
     borderWidth: 1,
     borderColor: "#E0E0E0",
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: Theme.radius.md,
+    padding: Theme.spacing.lg,
     fontSize: 18,
     fontWeight: "600",
     color: Colors.neutral.textDark,
   },
   quantityUnit: {
-    marginTop: 8,
+    marginTop: Theme.spacing.sm,
     fontSize: 13,
     color: Colors.neutral.mutedGray,
   },
   caloriePreview: {
     backgroundColor: `${Colors.primary.green}10`,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: Theme.radius.md,
+    padding: Theme.spacing.lg,
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: Theme.spacing.xl,
   },
   caloriePreviewText: {
     fontSize: 24,
@@ -606,12 +607,12 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     flexDirection: "row",
-    gap: 12,
+    gap: Theme.spacing.md,
   },
   modalButton: {
     flex: 1,
-    padding: 16,
-    borderRadius: 12,
+    padding: Theme.spacing.lg,
+    borderRadius: Theme.radius.md,
     alignItems: "center",
   },
   cancelButton: {
