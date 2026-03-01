@@ -64,7 +64,7 @@ export default function DashboardScreen() {
         router.replace("/");
         return;
       }
-      loadDashboardData();
+      await loadDashboardData();
     };
     checkAuthAndLoad();
   }, []);
@@ -88,26 +88,35 @@ export default function DashboardScreen() {
   };
 
   const loadTodayMeals = async () => {
-    try {
-      const token = await auth.getToken();
-      if (!token) return;
+  try {
+    const token = await auth.getToken();
+    if (!token) return;
 
-      const today = new Date().toISOString().split("T")[0];
-      const response = await fetch(`${API_BASE}/meals?date=${today}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+    const today = new Date().toISOString().split("T")[0];
+    const url = `${API_BASE}/meals?date=${today}`;
+    console.log("[Meals] GET:", url);
+    console.log("[Meals] tokenLen:", token?.length);
+console.log("[Meals] authHeader:", `Bearer ${token}`.slice(0, 25) + "...");
 
-      if (response.ok) {
-        const meals = await response.json();
-        setTodayMeals(meals);
-        await checkAlerts(meals);
-      }
-    } catch (error) {
-      console.error("Failed to load meals:", error);
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    console.log("[Meals] status:", response.status);
+
+    if (!response.ok) {
+      const txt = await response.text().catch(() => "");
+      console.log("[Meals] body:", txt.slice(0, 200));
+      throw new Error(`Meals fetch failed: ${response.status}`);
     }
-  };
+
+    const meals = await response.json();
+    setTodayMeals(meals);
+    await checkAlerts(meals);
+  } catch (error) {
+    console.error("Failed to load meals:", error);
+  }
+};
 
   const checkAlerts = async (meals: Meal[]) => {
     const userPrefs = await preferences.fetch();
@@ -145,6 +154,41 @@ export default function DashboardScreen() {
       console.error("Failed to remove symptom:", error);
       Alert.alert("Error", "Failed to remove symptom");
     }
+  };
+
+  const handleDeleteMeal = async (mealId: string) => {
+    Alert.alert(
+      "Delete Meal",
+      "Are you sure you want to delete this meal?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await auth.getToken();
+              if (!token) return;
+
+              const response = await fetch(`${API_BASE}/meals/${mealId}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+
+              if (!response.ok) {
+                throw new Error("Failed to delete meal");
+              }
+
+              setTodayMeals((prev) => prev.filter((m) => m.id !== mealId));
+              setAlerts((prev) => prev.filter((a) => a.meal.id !== mealId));
+            } catch (error) {
+              console.error("Failed to delete meal:", error);
+              Alert.alert("Error", "Failed to delete meal");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getMealTypeIcon = (mealType: string) => {
@@ -346,7 +390,16 @@ export default function DashboardScreen() {
                     />
                     <Text style={styles.mealType}>{getMealTypeLabel(meal.mealType)}</Text>
                   </View>
-                  <Text style={styles.mealTime}>{formatTime(meal.occurredAt)}</Text>
+                  <View style={styles.mealHeaderActions}>
+                    <Text style={styles.mealTime}>{formatTime(meal.occurredAt)}</Text>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteMeal(meal.id)}
+                      style={styles.deleteMealButton}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <FontAwesome name="trash" size={14} color={Theme.colors.text.tertiary} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 <View style={styles.mealItems}>
@@ -601,6 +654,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: Theme.spacing.md,
+  },
+  mealHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Theme.spacing.sm,
+  },
+  deleteMealButton: {
+    padding: Theme.spacing.xs,
   },
   mealTypeContainer: {
     flexDirection: "row",

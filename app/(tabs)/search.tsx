@@ -1,23 +1,13 @@
+import AllergenWarning from "@/components/AllergenWarning";
+import { Colors } from "@/constants/Colors";
+import { saveFood } from "@/src/_api/savedFoods";
 import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
 import { auth } from "@/src/lib/auth";
-import AllergenWarning from "@/components/AllergenWarning";
-import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, } from "react-native";
 
 interface Food {
   id: string;
@@ -25,9 +15,18 @@ interface Food {
   brand?: string;
   servingUnit?: string;
   servingQty?: number;
+
+  //UI/old shape
   kcal?: number;
+
+  //external API form to stop 0kcal responses
+  calories?: number;
+  energyKcal?: number;
+  externalId?: string;
+
   macros?: any;
 }
+
 
 interface MealItem {
   food: Food;
@@ -74,6 +73,50 @@ export default function AddSearch() {
 
     return () => clearTimeout(delayDebounce);
   }, [searchQuery, searchFoods]);
+  const getFoodKcal = (food: Food | null | undefined) => {
+    const v = Number((food as any)?.kcal ?? (food as any)?.calories ?? (food as any)?.energyKcal);
+    return Number.isFinite(v) ? v : 0;
+  };
+
+  const getFoodKcalForQty = (food: Food, qty: number) => {
+    const baseKcal = getFoodKcal(food);
+
+    // If servingUnit is grams and servingQty exists (often "100 g"),
+    // scale calories proportionally. Otherwise treat qty as "servings".
+    const unit = String(food.servingUnit ?? "").toLowerCase();
+    const baseQty = Number(food.servingQty);
+
+    const looksLikeGrams = unit === "g" || unit.includes("gram");
+    if (looksLikeGrams && Number.isFinite(baseQty) && baseQty > 0) {
+      return baseKcal * (qty / baseQty);
+    }
+
+    return baseKcal * qty;
+  };
+  const handleSaveFood = async (food: Food) => {
+  try {
+    const result = await saveFood({
+      foodId: food.id,
+      id: food.id,
+      externalId: food.externalId ?? null,
+      barcode: (food as any).barcode ?? null,
+      name: food.name,
+      brand: food.brand ?? null,
+      kcal: getFoodKcal(food),
+      servingQty: food.servingQty ?? null,
+      servingUnit: food.servingUnit ?? null,
+      imageUrl: (food as any).imageUrl ?? null,
+      source: (food as any).source ?? "UPC_API",
+    });
+     if (!result) {
+      Alert.alert("Login required", "Please log in to save foods 🔒");
+      return;
+    }
+    Alert.alert("Saved", `${food.name} saved`);
+  } catch (e: any) {
+    Alert.alert("Error", e?.message || "Failed to save");
+  }
+};
 
   const handleFoodSelect = async (food: Food) => {
     setSelectedFood(food);
@@ -92,7 +135,7 @@ export default function AddSearch() {
   const handleAddToMeal = () => {
     if (!selectedFood) return;
     
-    const qty = parseFloat(quantity) || 1;
+    const qty = parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1;
     setMealItems([...mealItems, { food: selectedFood, qty }]);
     setQuantityModalVisible(false);
     setSelectedFood(null);
@@ -104,7 +147,7 @@ export default function AddSearch() {
     const newItems = mealItems.filter((_, i) => i !== index);
     setMealItems(newItems);
   };
-
+ 
   const handleSaveMeal = async () => {
     if (mealItems.length === 0) {
       Alert.alert("Empty Meal", "Please add at least one food item to your meal.");
@@ -112,11 +155,17 @@ export default function AddSearch() {
     }
 
     try {
-      const token = await auth.getToken();
-      if (!token) {
-        Alert.alert("Not Authenticated", "Please log in to save meals.");
-        return;
-      }
+      const rawToken = await auth.getToken(); 
+const token = rawToken?.replace(/^Bearer\s+/i, ""); 
+
+console.log("[SaveMeal] raw token =", rawToken);
+console.log("[SaveMeal] cleaned token =", token);
+console.log("[SaveMeal] auth header =", `Bearer ${token}`);
+
+if (!token) {
+  Alert.alert("Not Authenticated", "Please log in to save meals.");
+  return;
+}
 
       const now = new Date();
       const response = await fetch(`${API_BASE}/meals`, {
@@ -128,12 +177,21 @@ export default function AddSearch() {
         body: JSON.stringify({
           occurred_at: now.toISOString(),
           meal_type: mealType,
-          items: mealItems.map(item => ({
-            food_id: item.food.id,
-            qty: item.qty,
+          items: mealItems.map((item) => ({
+          food_id: item.food.id ?? null,              //keep if it exists
+          externalId: item.food.externalId ?? null,   //allow server to resolve/create
+          name: item.food.name,
+          brand: item.food.brand ?? null,
+          kcal: getFoodKcal(item.food) || null,
+          qty: item.qty,
           })),
         }),
       });
+      if (response.status === 401) {
+  Alert.alert("Session expired", "Please log in again.");
+  router.replace("/");
+  return;
+}
 
       if (response.ok) {
         Alert.alert(
@@ -150,7 +208,8 @@ export default function AddSearch() {
           ]
         );
       } else {
-        throw new Error("Failed to save meal");
+        const msg = await response.text().catch(() => "");
+        throw new Error(msg || "Failed to save meal");
       }
     } catch (error) {
       console.error("Save meal error:", error);
@@ -158,12 +217,14 @@ export default function AddSearch() {
     }
   };
 
+   
+
   const getTotalCalories = () => {
     return mealItems.reduce((sum, item) => {
-      const calories = item.food.kcal || 0;
-      return sum + (calories * item.qty);
+      return sum + getFoodKcalForQty(item.food, item.qty);
     }, 0);
   };
+
 
   return (
     <View style={styles.container}>
@@ -222,8 +283,8 @@ export default function AddSearch() {
         </ScrollView>
       )}
 
-      {/* Search Results */}
-      <ScrollView 
+            {/* Search Results */}
+      <ScrollView
         style={styles.resultsContainer}
         contentContainerStyle={styles.resultsContent}
         keyboardShouldPersistTaps="handled"
@@ -251,35 +312,56 @@ export default function AddSearch() {
           </View>
         )}
 
-        {foods.map((food) => (
-          <TouchableOpacity
-            key={food.id}
-            style={styles.foodCard}
-            onPress={() => handleFoodSelect(food)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.foodCardContent}>
-              <View style={styles.foodInfo}>
-                <Text style={styles.foodName}>{food.name}</Text>
-                {food.brand && (
-                  <Text style={styles.foodBrand}>{food.brand}</Text>
-                )}
-                {food.servingUnit && (
-                  <Text style={styles.foodServing}>
-                    {food.servingQty || 1} {food.servingUnit}
-                  </Text>
-                )}
-              </View>
-              {food.kcal && (
-                <View style={styles.calorieBadge}>
-                  <Text style={styles.calorieText}>{Math.round(food.kcal)}</Text>
-                  <Text style={styles.calorieUnit}>kcal</Text>
-                </View>
-              )}
-            </View>
-            <FontAwesome name="plus-circle" size={24} color={Colors.primary.green} />
-          </TouchableOpacity>
-        ))}
+        {foods.map((food, idx) => {
+          const key =
+            String(food?.id ?? (food as any)?.externalId ?? `${food?.name ?? "food"}-${food?.brand ?? ""}`) +
+            "-" +
+            idx; //idx suffix guarantees uniqueness even if ids repeat
+
+          const kcalVal = getFoodKcal(food);
+          const servingQty = Number(food.servingQty);
+          const servingUnit = String(food.servingUnit ?? "").trim();
+
+          return (
+  <TouchableOpacity
+    key={key}
+    style={styles.foodCard}
+    onPress={() => handleFoodSelect(food)}
+    activeOpacity={0.7}
+  >
+    <View style={styles.foodCardContent}>
+      <View style={styles.foodInfo}>
+        <Text style={styles.foodName}>{food.name}</Text>
+        {!!food.brand && <Text style={styles.foodBrand}>{food.brand}</Text>}
+        {servingUnit ? (
+          <Text style={styles.foodServing}>
+            {Number.isFinite(servingQty) && servingQty > 0 ? servingQty : 1} {servingUnit}
+          </Text>
+        ) : (
+          <Text style={styles.foodServing}>1 serving</Text>
+        )}
+      </View>
+
+      {kcalVal > 0 && (
+        <View style={styles.calorieBadge}>
+          <Text style={styles.calorieText}>{Math.round(kcalVal)}</Text>
+          <Text style={styles.calorieUnit}>kcal</Text>
+        </View>
+      )}
+    </View>
+
+    <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 10 }}>
+      <TouchableOpacity
+        onPress={(e) => {
+          e.stopPropagation();
+          handleSaveFood(food);
+        }}
+      >
+        <FontAwesome name="bookmark" size={22} color={Colors.primary.orange} />
+      </TouchableOpacity>
+    </View>
+  </TouchableOpacity>
+); })} 
       </ScrollView>
 
       {/* Quantity Modal */}
@@ -311,12 +393,13 @@ export default function AddSearch() {
                 )}
 
                 <View style={styles.quantityContainer}>
-                  <Text style={styles.quantityLabel}>Quantity</Text>
+                  <Text style={styles.quantityLabel}></Text>
                   <TextInput
                     style={styles.quantityInput}
                     value={quantity}
                     onChangeText={setQuantity}
-                    keyboardType="decimal-pad"
+                    keyboardType="numbers-and-punctuation"
+                    onSubmitEditing={handleAddToMeal}
                     placeholder="1"
                   />
                   {selectedFood.servingUnit && (
@@ -324,13 +407,20 @@ export default function AddSearch() {
                   )}
                 </View>
 
-                {selectedFood.kcal && (
+                {selectedFood && (
                   <View style={styles.caloriePreview}>
                     <Text style={styles.caloriePreviewText}>
-                      {Math.round((selectedFood.kcal || 0) * (parseFloat(quantity) || 1))} kcal
+                      {Math.round(
+                        getFoodKcalForQty(
+                          selectedFood,
+                          parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1
+                        )
+                      )}{" "}
+                      kcal
                     </Text>
                   </View>
                 )}
+
 
                 <View style={styles.modalActions}>
                   <TouchableOpacity
@@ -467,8 +557,8 @@ const styles = StyleSheet.create({
     color: Colors.neutral.mutedGray,
   },
   foodCard: {
-    flexDirection: "row",
-    alignItems: "center",
+    //flexDirection: "row",
+    //alignItems: "center",
     backgroundColor: Colors.neutral.cardSurface,
     borderRadius: 12,
     padding: 16,

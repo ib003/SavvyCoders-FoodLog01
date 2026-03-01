@@ -47,26 +47,35 @@ export default function AddSearch() {
   const [allergenAnalysis, setAllergenAnalysis] = useState<any>(null);
 
   const searchFoods = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      setFoods([]);
-      return;
+  const q = query.trim();
+  if (!q) {
+    setFoods([]);
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const url = `${API_BASE}/foods?q=${encodeURIComponent(q)}`;
+    console.log("[Foods] GET:", url);
+
+    const response = await fetch(url);
+    console.log("[Foods] status:", response.status);
+
+    if (!response.ok) {
+      const txt = await response.text().catch(() => "");
+      console.log("[Foods] body:", txt.slice(0, 200));
+      throw new Error(`Foods fetch failed: ${response.status}`);
     }
 
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/foods?q=${encodeURIComponent(query)}`);
-      if (response.ok) {
-        const data = await response.json();
-        setFoods(data);
-      }
-    } catch (error) {
-      console.error("Search error:", error);
-      Alert.alert("Error", "Failed to search foods. Please check your connection.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+    const data = await response.json();
+    setFoods(Array.isArray(data) ? data : []);
+  } catch (error: any) {
+    console.error("Search error:", error?.message || error);
+    Alert.alert("Error", "Failed to search foods. Please check your connection.");
+  } finally {
+    setLoading(false);
+  }
+}, []);
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
       searchFoods(searchQuery);
@@ -119,21 +128,32 @@ export default function AddSearch() {
       }
 
       const now = new Date();
-      const response = await fetch(`${API_BASE}/meals`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          occurred_at: now.toISOString(),
-          meal_type: mealType,
-          items: mealItems.map(item => ({
-            food_id: item.food.id,
-            qty: item.qty,
-          })),
-        }),
-      });
+      const url = `${API_BASE}/meals`;
+console.log("[Meals] POST:", url);
+
+const response = await fetch(url, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    occurred_at: now.toISOString(),
+    meal_type: mealType,
+    items: mealItems.map(item => ({
+      food_id: Number(item.food.id),   // ← important
+      qty: item.qty,
+    })),
+  }),
+});
+
+console.log("[Meals] status:", response.status);
+
+if (!response.ok) {
+  const txt = await response.text().catch(() => "");
+  console.log("[Meals] body:", txt.slice(0, 200));
+  throw new Error(`Failed to save meal: ${response.status}`);
+}
 
       if (response.ok) {
         Alert.alert(
