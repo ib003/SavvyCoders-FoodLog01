@@ -1,4 +1,4 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
@@ -11,7 +11,7 @@ import { auth } from '@/src/lib/auth';
 
 export {
   // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
+  ErrorBoundary
 } from 'expo-router';
 
 export const unstable_settings = {
@@ -116,6 +116,14 @@ function RootLayoutNav() {
         <Stack.Screen name="register" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        <Stack.Screen 
+          name="chat" 
+          options={{ 
+            presentation: 'modal',
+            gestureEnabled: false,
+            headerShown: false,
+          }} 
+        />
       </Stack>
     </ThemeProvider>
   );

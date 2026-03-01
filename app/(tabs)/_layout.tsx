@@ -2,14 +2,28 @@ import { useClientOnlyValue } from "@/components/useClientOnlyValue";
 import { useColorScheme } from "@/components/useColorScheme";
 import Colors from "@/constants/Colors";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import React from "react";
+import { TouchableOpacity } from "react-native";
 
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>["name"];
   color: string;
 }) {
   return <FontAwesome size={24} style={{ marginBottom: -3 }} {...props} />;
+}
+
+function ChatButton() {
+  const router = useRouter();
+  
+  return (
+    <TouchableOpacity
+      onPress={() => router.push('/chat')}
+      style={{ marginRight: 15 }}
+    >
+      <FontAwesome name="commenting-o" size={24} color="#007AFF" />
+    </TouchableOpacity>
+  );
 }
 
 export default function TabLayout() {
@@ -21,6 +35,7 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
         headerShown: useClientOnlyValue(false, true),
         tabBarStyle: { display: "flex" },
+        headerRight: () => <ChatButton />,
       }}
       initialRouteName="Dashboard"
     >
