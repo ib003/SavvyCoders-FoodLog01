@@ -10,26 +10,39 @@ import { auth } from "@/src/lib/auth";
 import { MealTypeValue } from "@/src/lib/mealTypes";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityIndicator, Alert, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, } from "react-native";
 
 interface Food {
-  id: string;
+  id: number | string;
   name: string;
   brand?: string;
   servingUnit?: string;
   servingQty?: number;
-
-  //UI/old shape
   kcal?: number;
-
-  //external API form to stop 0kcal responses
   calories?: number;
   energyKcal?: number;
   externalId?: string;
-
-  macros?: any;
+  macros?: {
+    protein?: number;
+    carbs?: number;
+    fat?: number;
+    fiber?: number;
+    sugar?: number;
+    sodium?: number;
+  };
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  fiber?: number;
+  sugar?: number;
+  sodium?: number;
+  ingredients?: string[];
+  allergens?: string[];
+  barcode?: string;
+  imageUrl?: string;
+  source?: string;
 }
 
 
@@ -37,6 +50,60 @@ interface MealItem {
   food: Food;
   qty: number;
 }
+
+const normalizeFood = (item: any): Food => ({
+  id: item?.id ?? item?.externalId ?? item?.name ?? Math.random().toString(),
+  name: String(item?.name ?? "Unknown Food"),
+  brand: item?.brand ?? undefined,
+  servingUnit: item?.servingUnit || item?.serving_unit || "serving",
+  servingQty: Number(item?.servingQty || item?.serving_qty || 1),
+  kcal: Number(item?.kcal ?? item?.calories ?? item?.energyKcal ?? 0) || 0,
+  calories: Number(item?.calories ?? item?.kcal ?? 0) || 0,
+  energyKcal: Number(item?.energyKcal ?? item?.kcal ?? item?.calories ?? 0) || 0,
+  externalId: item?.externalId ?? undefined,
+  macros: {
+    protein: Number(item?.macros?.protein ?? item?.protein ?? 0) || 0,
+    carbs: Number(item?.macros?.carbs ?? item?.carbs ?? 0) || 0,
+    fat: Number(item?.macros?.fat ?? item?.fat ?? 0) || 0,
+    fiber: Number(item?.macros?.fiber ?? item?.fiber ?? 0) || 0,
+    sugar: Number(item?.macros?.sugar ?? item?.sugar ?? 0) || 0,
+    sodium: Number(item?.macros?.sodium ?? item?.sodium ?? 0) || 0,
+  },
+  protein: Number(item?.protein ?? item?.macros?.protein ?? 0) || 0,
+  carbs: Number(item?.carbs ?? item?.macros?.carbs ?? 0) || 0,
+  fat: Number(item?.fat ?? item?.macros?.fat ?? 0) || 0,
+  fiber: Number(item?.fiber ?? item?.macros?.fiber ?? 0) || 0,
+  sugar: Number(item?.sugar ?? item?.macros?.sugar ?? 0) || 0,
+  sodium: Number(item?.sodium ?? item?.macros?.sodium ?? 0) || 0,
+  ingredients: Array.isArray(item?.ingredients) ? item.ingredients : [],
+  allergens: Array.isArray(item?.allergens) ? item.allergens : [],
+  barcode: item?.barcode ?? undefined,
+  imageUrl: item?.imageUrl ?? undefined,
+  source: item?.source ?? "UPC_API",
+});
+
+const getFoodProtein = (food: Food | null | undefined) => {
+  const v = Number(food?.macros?.protein ?? food?.protein ?? 0);
+  return Number.isFinite(v) ? v : 0;
+};
+
+const getFoodCarbs = (food: Food | null | undefined) => {
+  const v = Number(food?.macros?.carbs ?? food?.carbs ?? 0);
+  return Number.isFinite(v) ? v : 0;
+};
+
+const getFoodFat = (food: Food | null | undefined) => {
+  const v = Number(food?.macros?.fat ?? food?.fat ?? 0);
+  return Number.isFinite(v) ? v : 0;
+};
+
+const getFoodIngredients = (food: Food | null | undefined): string[] => {
+  return Array.isArray(food?.ingredients) ? food.ingredients : [];
+};
+
+const getFoodAllergens = (food: Food | null | undefined): string[] => {
+  return Array.isArray(food?.allergens) ? food.allergens : [];
+};
 
 export default function AddSearch() {
   const router = useRouter();
@@ -59,11 +126,17 @@ export default function AddSearch() {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/foods?q=${encodeURIComponent(query)}`);
-      if (response.ok) {
-        const data = await response.json();
-        setFoods(data);
+      const response = await fetch(`${API_BASE}/foods?q=${encodeURIComponent(query.trim())}`);
+      if (!response.ok) {
+        const msg = await response.text().catch(() => "");
+        throw new Error(msg || "Failed to search foods");
       }
+
+      const data = await response.json();
+      const normalizedFoods: Food[] = Array.isArray(data)
+        ? data.map((item: any) => normalizeFood(item))
+        : [];
+      setFoods(normalizedFoods);
     } catch (error) {
       console.error("Search error:", error);
       Alert.alert("Error", "Failed to search foods. Please check your connection.");
@@ -94,42 +167,48 @@ export default function AddSearch() {
     return kcal > 0 ? `${kcal} kcal per serving` : "Calories vary by serving";
   };
   const handleSaveFood = async (food: Food) => {
-  try {
-    const result = await saveFood({
-      foodId: food.id,
-      id: food.id,
-      externalId: food.externalId ?? null,
-      barcode: (food as any).barcode ?? null,
-      name: food.name,
-      brand: food.brand ?? null,
-      kcal: getFoodKcal(food),
-      servingQty: food.servingQty ?? null,
-      servingUnit: food.servingUnit ?? null,
-      imageUrl: (food as any).imageUrl ?? null,
-      source: (food as any).source ?? "UPC_API",
-    });
-     if (!result) {
-      Alert.alert("Login required", "Please log in to save foods 🔒");
-      return;
+    try {
+      const result = await saveFood({
+        foodId: food.id,
+        id: food.id,
+        externalId: food.externalId ?? null,
+        barcode: food.barcode ?? null,
+        name: food.name,
+        brand: food.brand ?? null,
+        kcal: getFoodKcal(food),
+        protein: getFoodProtein(food),
+        carbs: getFoodCarbs(food),
+        fat: getFoodFat(food),
+        ingredients: getFoodIngredients(food),
+        allergens: getFoodAllergens(food),
+        servingQty: food.servingQty ?? null,
+        servingUnit: food.servingUnit ?? null,
+        imageUrl: food.imageUrl ?? null,
+        source: food.source ?? "UPC_API",
+      });
+      if (!result) {
+        Alert.alert("Login required", "Please log in to save foods 🔒");
+        return;
+      }
+      Alert.alert("Saved", `${food.name} saved`);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Failed to save");
     }
-    Alert.alert("Saved", `${food.name} saved`);
-  } catch (e: any) {
-    Alert.alert("Error", e?.message || "Failed to save");
-  }
-};
+  };
 
   const handleFoodSelect = async (food: Food) => {
     setSelectedFood(food);
     setQuantity("1");
-    
-    // Check for allergens
-    const foodTags = [food.name.toLowerCase()];
-    if (food.brand) {
-      foodTags.push(food.brand.toLowerCase());
-    }
+
+    const foodTags = [
+      food.name.toLowerCase(),
+      ...(food.brand ? [food.brand.toLowerCase()] : []),
+      ...getFoodIngredients(food).map((i) => String(i).toLowerCase()),
+      ...getFoodAllergens(food).map((a) => String(a).toLowerCase()),
+    ];
+
     const analysis = await analyzeFood(foodTags);
     setAllergenAnalysis(analysis);
-    
     setQuantityModalVisible(true);
   };
 
@@ -138,13 +217,18 @@ export default function AddSearch() {
     setQuantityModalVisible(false);
     setSelectedFood(null);
     setQuantity("1");
+    setAllergenAnalysis(null);
+  };
+
+  const getParsedQty = () => {
+    return parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1;
   };
 
   const handleAddToMeal = () => {
     if (!selectedFood) return;
-    
-    const qty = parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1;
-    setMealItems([...mealItems, { food: selectedFood, qty }]);
+
+    const qty = getParsedQty();
+    setMealItems((prev) => [...prev, { food: selectedFood, qty }]);
     closeQuantityModal();
     Alert.alert("Added!", `${selectedFood.name} added to your meal.`);
   };
@@ -153,10 +237,19 @@ export default function AddSearch() {
     const newItems = mealItems.filter((_, i) => i !== index);
     setMealItems(newItems);
   };
+const handleBackToAddMeal = () => {
+  router.replace("/(tabs)/AddMeal");
+};
 
-  const handleBackToAddMeal = () => {
-    router.replace("/(tabs)/AddMeal");
+const mealTypeToApi = (t: MealTypeValue) => {
+  const map: Record<MealTypeValue, string> = {
+    breakfast: "BREAKFAST",
+    lunch: "LUNCH",
+    dinner: "DINNER",
+    snack: "SNACK",
   };
+  return map[t] ?? "BREAKFAST";
+};
  
   const handleSaveMeal = async () => {
     if (mealItems.length === 0) {
@@ -168,65 +261,75 @@ export default function AddSearch() {
       const rawToken = await auth.getToken(); 
 const token = rawToken?.replace(/^Bearer\s+/i, ""); 
 
-console.log("[SaveMeal] raw token =", rawToken);
-console.log("[SaveMeal] cleaned token =", token);
-console.log("[SaveMeal] auth header =", `Bearer ${token}`);
-
 if (!token) {
   Alert.alert("Not Authenticated", "Please log in to save meals.");
-  return;
-}
-
-      const now = new Date();
-      const response = await fetch(`${API_BASE}/meals`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          occurred_at: now.toISOString(),
-          meal_type: mealType,
-          items: mealItems.map((item) => ({
-          food_id: item.food.id ?? null,              //keep if it exists
-          externalId: item.food.externalId ?? null,   //allow server to resolve/create
-          name: item.food.name,
-          brand: item.food.brand ?? null,
-          kcal: getFoodKcal(item.food) || null,
-          qty: item.qty,
-          })),
-        }),
-      });
-      if (response.status === 401) {
-  Alert.alert("Session expired", "Please log in again.");
   router.replace("/");
   return;
 }
 
-      if (response.ok) {
-        Alert.alert(
-          "Success!",
-          "Your meal has been saved.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                setMealItems([]);
-                router.back();
-              },
-            },
-          ]
-        );
-      } else {
-        const msg = await response.text().catch(() => "");
-        throw new Error(msg || "Failed to save meal");
-      }
-    } catch (error) {
-      console.error("Save meal error:", error);
-      Alert.alert("Error", "Failed to save meal. Please try again.");
-    }
-  };
+    const payload = {
+      occurred_at: new Date().toISOString(),
+      meal_type: mealTypeToApi(mealType), 
+      items: mealItems.map((item) => ({
+        food_id: item.food.id ?? null,
+        externalId: item.food.externalId ?? null,
+        name: item.food.name,
+        brand: item.food.brand ?? null,
+        source: item.food.source ?? "UPC_API",
+        servingQty: item.food.servingQty ?? 1,
+        servingUnit: item.food.servingUnit ?? "serving",
+        kcal: Math.round(getFoodKcalForQty(item.food, item.qty)),
+        protein: getFoodProtein(item.food) || 0,
+        carbs: getFoodCarbs(item.food) || 0,
+        fat: getFoodFat(item.food) || 0,
+        ingredients: getFoodIngredients(item.food),
+        allergens: getFoodAllergens(item.food),
+        qty: item.qty,
+      })),
+    };
+    const total = Math.round(getTotalCalories());
+if (total <= 0) {
+  Alert.alert("Missing calories", "This food has no calorie info from the source.");
+  // optionally still allow saving if you want
+}
+    console.log("[SaveMeal] payload =", JSON.stringify(payload, null, 2));
+     const response = await fetch(`${API_BASE}/meals`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
 
+    const text = await response.text();
+    console.log("[SaveMeal] status =", response.status);
+    console.log("[SaveMeal] response =", text);
+
+    if (response.status === 401) {
+      Alert.alert("Session expired", "Please log in again.");
+      router.replace("/");
+      return;
+    }
+
+    if (!response.ok) {
+      throw new Error(text || "Failed to save meal");
+    }
+
+    Alert.alert("Success!", "Your meal has been saved.", [
+      {
+        text: "OK",
+        onPress: () => {
+          setMealItems([]);
+          router.push("/(tabs)/Dashboard"); 
+        },
+      },
+    ]);
+  } catch (error: any) {
+    console.error("Save meal error:", error);
+    Alert.alert("Error", error?.message || "Failed to save meal. Please try again.");
+  }
+};
    
 
   const getTotalCalories = () => {
@@ -264,6 +367,29 @@ if (!token) {
           )}
         </View>
         </View>
+      </View>
+      <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 16, marginTop: 8 }}>
+        {([
+          ["breakfast", "BREAKFAST"],
+          ["lunch", "LUNCH"],
+          ["dinner", "DINNER"],
+          ["snack", "SNACK"],
+        ] as const).map(([value, label]) => (
+          <TouchableOpacity
+            key={value}
+            onPress={() => setMealType(value)}
+            style={{
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: mealType === value ? Colors.primary.green : "#E0E0E0",
+              backgroundColor: mealType === value ? `${Colors.primary.green}15` : "white",
+            }}
+          >
+            <Text style={{ fontWeight: "700" }}>{label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* Meal Summary Bar */}
@@ -342,45 +468,49 @@ if (!token) {
           const servingUnit = String(food.servingUnit ?? "").trim();
 
           return (
-  <TouchableOpacity
-    key={key}
-    style={styles.foodCard}
-    onPress={() => handleFoodSelect(food)}
-    activeOpacity={0.7}
-  >
-    <View style={styles.foodCardContent}>
-      <View style={styles.foodInfo}>
-        <Text style={styles.foodName}>{food.name}</Text>
-        {!!food.brand && <Text style={styles.foodBrand}>{food.brand}</Text>}
-        {servingUnit ? (
-          <Text style={styles.foodServing}>
-            {Number.isFinite(servingQty) && servingQty > 0 ? servingQty : 1} {servingUnit}
-          </Text>
-        ) : (
-          <Text style={styles.foodServing}>1 serving</Text>
-        )}
-      </View>
+            <TouchableOpacity
+              key={key}
+              style={styles.foodCard}
+              onPress={() => handleFoodSelect(food)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.foodCardContent}>
+                <View style={styles.foodInfo}>
+                  <Text style={styles.foodName}>{food.name}</Text>
+                  {!!food.brand && <Text style={styles.foodBrand}>{food.brand}</Text>}
+                  {servingUnit ? (
+                    <Text style={styles.foodServing}>
+                      {Number.isFinite(servingQty) && servingQty > 0 ? servingQty : 1} {servingUnit}
+                    </Text>
+                  ) : (
+                    <Text style={styles.foodServing}>1 serving</Text>
+                  )}
+                  <Text style={styles.foodMacros}>
+                    P {Math.round(getFoodProtein(food))}g • C {Math.round(getFoodCarbs(food))}g • F {Math.round(getFoodFat(food))}g
+                  </Text>
+                </View>
 
-      {kcalVal > 0 && (
-        <View style={styles.calorieBadge}>
-          <Text style={styles.calorieText}>{Math.round(kcalVal)}</Text>
-          <Text style={styles.calorieUnit}>kcal</Text>
-        </View>
-      )}
-    </View>
+                {kcalVal > 0 && (
+                  <View style={styles.calorieBadge}>
+                    <Text style={styles.calorieText}>{Math.round(kcalVal)}</Text>
+                    <Text style={styles.calorieUnit}>kcal</Text>
+                  </View>
+                )}
+              </View>
 
-    <View style={styles.foodActions}>
-      <TouchableOpacity
-        onPress={(e) => {
-          e.stopPropagation();
-          handleSaveFood(food);
-        }}
-      >
-        <FontAwesome name="bookmark" size={22} color={Colors.primary.orange} />
-      </TouchableOpacity>
-    </View>
-  </TouchableOpacity>
-); })} 
+              <View style={styles.foodActions}>
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleSaveFood(food);
+                  }}
+                >
+                  <FontAwesome name="bookmark" size={22} color={Colors.primary.orange} />
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
       {/* Quantity Modal */}
@@ -425,6 +555,7 @@ if (!token) {
                     value={quantity}
                     onChangeText={setQuantity}
                     keyboardType="numbers-and-punctuation"
+                    inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
                     placeholder="1"
                   />
                   <Text style={styles.quantityUnit}>{getServingText(selectedFood)}</Text>
@@ -433,13 +564,10 @@ if (!token) {
                 {selectedFood && (
                   <View style={styles.caloriePreview}>
                     <Text style={styles.caloriePreviewText}>
-                      {Math.round(
-                        getFoodKcalForQty(
-                          selectedFood,
-                          parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1
-                        )
-                      )}{" "}
-                      kcal
+                      {Math.round(getFoodKcalForQty(selectedFood, getParsedQty()))} kcal
+                    </Text>
+                    <Text style={styles.macroPreviewText}>
+                      P {Math.round(getFoodProtein(selectedFood) * getParsedQty())}g • C {Math.round(getFoodCarbs(selectedFood) * getParsedQty())}g • F {Math.round(getFoodFat(selectedFood) * getParsedQty())}g
                     </Text>
                   </View>
                 )}
@@ -626,6 +754,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.neutral.mutedGray,
   },
+  foodMacros: {
+    fontSize: 12,
+    color: Colors.neutral.mutedGray,
+    marginTop: 4,
+  },
   calorieBadge: {
     alignItems: "center",
     backgroundColor: `${Colors.primary.green}15`,
@@ -713,6 +846,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
     color: Colors.primary.green,
+  },
+  macroPreviewText: {
+    marginTop: Theme.spacing.sm,
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.neutral.textDark,
   },
   modalActions: {
     flexDirection: "row",
