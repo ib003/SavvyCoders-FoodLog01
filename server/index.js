@@ -471,7 +471,7 @@ app.get("/foods", async (req, res) => {
             calories: (typeof calories === "number") ? Math.round(calories) : null,
             barcode: null,
             imageUrl: null,
-            source: "UPC_API",
+            source: "FDC_API",
             externalId: f.fdcId ? String(f.fdcId) : null,
             servingQty: servingSize,
             kcal: (typeof calories === "number") ? Math.round(calories) : null,
@@ -539,12 +539,14 @@ app.get("/barcode/:upc", async (req, res) => {
 
     // Try to get calories per serving or per 100g
     const nutr = p.nutriments || {};
-    const kcal = (
+    const kcalRaw = (
       nutr['energy-kcal_serving'] ?? nutr['energy-kcal_100g'] ?? nutr['energy_serving'] ?? nutr['energy_100g'] ?? null
     );
 
     // Use serving_size as a human readable unit (e.g., "100 g" or "1 serving")
     const servingSizeRaw = p.serving_size || null;
+   const kcalNum = kcalRaw == null ? null : Number(kcalRaw);
+const calories = Number.isFinite(kcalNum) && kcalNum > 0 ? Math.round(kcalNum) : null;
 
     // Create a new Food record from the external product
     const created = await prisma.food.create({
@@ -613,7 +615,6 @@ app.post("/meals", auth, async (req, res) => {
     if (!occurred_at || !meal_type || !Array.isArray(items)) {
       return res.status(400).json({ error: "invalid body" });
     }
-
     //normalize meal strings
     const mealTypeMap = {
       breakfast: "BREAKFAST",
@@ -654,10 +655,11 @@ if (items.length) {
       const kcal = it.kcal ?? it.calories ?? null;
 
       let food = null;
-
+     const source = it.source ?? "UPC_API";
       if (externalId) {
+       
         food = await prisma.food.findFirst({
-          where: { externalId: String(externalId) },
+          where: { externalId: String(externalId), source },
         });
 
         if (!food) {
@@ -666,7 +668,7 @@ if (items.length) {
               name: name || `Food ${externalId}`,
               brand: brand,
               calories: kcal != null ? Number(kcal) : null,
-              source: "UPC_API",
+              source,
               externalId: String(externalId),
             },
           });
@@ -677,6 +679,7 @@ if (items.length) {
           where: {
             name: { equals: String(name), mode: "insensitive" },
             ...(brand ? { brand: { equals: String(brand), mode: "insensitive" } } : {}),
+            source,
           },
         });
 
@@ -686,7 +689,7 @@ if (items.length) {
               name: String(name),
               brand: brand,
               calories: kcal != null ? Number(kcal) : null,
-              source: "UPC_API",
+              source,
               externalId: null,
             },
           });
@@ -707,7 +710,7 @@ if (items.length) {
       quantity: it.qty ?? it.quantity ?? 1,
       unit: it.unit ?? null,
       notes: it.notes ?? null,
-      calories: it.calories ?? null,
+      calories: it.kcal ?? it.calories ?? null,
       protein: it.protein ?? null,
       carbs: it.carbs ?? null,
       fat: it.fat ?? null,
@@ -742,6 +745,7 @@ app.get("/meals", auth, async (req, res) => {
     items: meal.items.map((item) => ({
       ...item,
       qty: item.quantity,
+       kcal: (item.calories ?? null),
       food: toFoodResponse(item.food),
     })),
   }));
@@ -1085,29 +1089,29 @@ async function resolveFoodId(input) {
   }
 
   if (externalId) {
-    let food = await prisma.food.findFirst({
-      where: {
+  const source = input?.source ?? "UPC_API";
+
+  let food = await prisma.food.findFirst({
+    where: { externalId: String(externalId), source },
+  });
+
+  if (!food) {
+    food = await prisma.food.create({
+      data: {
+        name: name || `Food ${externalId}`,
+        brand: input?.brand ?? null,
+        calories: input?.kcal ?? input?.calories ?? null,
+        servingSize: input?.servingSize ?? input?.servingQty ?? null,
+        servingUnit: input?.servingUnit ?? null,
+        imageUrl: input?.imageUrl ?? input?.image_url ?? null,
+        source,
         externalId: String(externalId),
-        ...(input?.source ? { source: input.source } : {}),
       },
     });
-
-    if (!food) {
-      food = await prisma.food.create({
-        data: {
-          name: name || `Food ${externalId}`,
-          brand: input?.brand ?? null,
-          calories: input?.kcal ?? input?.calories ?? null,
-          servingSize: input?.servingSize ?? input?.servingQty ?? null,
-          servingUnit: input?.servingUnit ?? null,
-          imageUrl: input?.imageUrl ?? null,
-          source: input?.source ?? "UPC_API",
-          externalId: String(externalId),
-        },
-      });
-    }
-    return food.id;
   }
+
+  return food.id;
+}
 
   if (name) {
     let food = await prisma.food.findFirst({
@@ -1127,7 +1131,7 @@ async function resolveFoodId(input) {
           calories: input?.kcal ?? input?.calories ?? null,
           servingSize: input?.servingSize ?? input?.servingQty ?? null,
           servingUnit: input?.servingUnit ?? null,
-          imageUrl: input?.imageUrl ?? null,
+          imageUrl: input?.imageUrl ?? input?.image_url ?? null,
           source: input?.source ?? "UPC_API",
           externalId: null,
         },

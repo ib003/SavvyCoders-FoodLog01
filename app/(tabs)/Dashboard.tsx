@@ -19,13 +19,14 @@ interface Meal {
   mealType: string;
   occurredAt: string;
   items: Array<{
+    qty: number;
+    kcal?: number | null;
     food: {
       id: string;
       name: string;
       brand?: string;
       kcal?: number;
     };
-    qty: number;
   }>;
 }
 
@@ -100,9 +101,30 @@ export default function DashboardScreen() {
       });
 
       if (response.ok) {
-        const meals = await response.json();
-        setTodayMeals(meals);
-        await checkAlerts(meals);
+        const raw = await response.json();
+        console.log("[Dashboard] raw meals =", JSON.stringify(raw?.[0], null, 2));
+console.log("[Dashboard] raw first item =", JSON.stringify(raw?.[0]?.items?.[0], null, 2));
+
+const normalized: Meal[] = (raw || []).map((m: any) => ({
+  id: String(m.id),
+  mealType: m.mealType ?? m.meal_type ?? "UNKNOWN",
+  occurredAt: m.dateTime ?? m.occurredAt ?? m.occurred_at ?? new Date().toISOString(),
+  items: (m.items || []).map((it: any) => ({
+    
+    qty: Number(it.qty ?? 1),
+kcal: Number(it.kcal ?? it.calories) || null,
+    food: {
+      id: String(it.food?.id ?? it.foodId ?? it.food_id ?? "unknown"),
+      name: it.food?.name ?? it.name ?? "Unknown food",
+      brand: it.food?.brand ?? it.brand,
+      // IMPORTANT: take kcal from item if backend stores it there
+      kcal: Number(it.kcal ?? it.food?.kcal) || null,
+    },
+  })),
+}));
+
+setTodayMeals(normalized);
+await checkAlerts(normalized);
       }
     } catch (error) {
       console.error("Failed to load meals:", error);
@@ -208,6 +230,12 @@ export default function DashboardScreen() {
       day: "numeric",
     });
   };
+
+  const getMealCalories = (meal: Meal) =>
+    meal.items.reduce((sum, item) => {
+      const kcal = Number(item.kcal ?? item.food.kcal);
+      return sum + (Number.isFinite(kcal) && kcal > 0 ? kcal : 0);
+    }, 0);
 
   if (loading) {
     return (
@@ -394,20 +422,26 @@ export default function DashboardScreen() {
                 </View>
 
                 <View style={styles.mealItems}>
-                  {meal.items.map((item, index) => (
-                    <View 
-                      key={item.food.id} 
-                      style={[
-                        styles.mealItem,
-                        index < meal.items.length - 1 && styles.mealItemBorder
-                      ]}
-                    >
-                      <Text style={styles.mealItemName}>{item.food.name}</Text>
-                      {item.food.kcal && (
-                        <Text style={styles.mealItemKcal}>{item.food.kcal} kcal</Text>
-                      )}
-                    </View>
-                  ))}
+                  {meal.items.map((item, index) => {
+  const kcal = Number(item.kcal ?? item.food.kcal);
+  const showKcal = Number.isFinite(kcal) && kcal > 0;
+
+  return (
+    <View
+      key={`${meal.id}-${index}-${item.food.id}`}
+      style={[
+        styles.mealItem,
+        index < meal.items.length - 1 && styles.mealItemBorder
+      ]}
+    >
+      <Text style={styles.mealItemName}>{item.food.name}</Text>
+
+      {showKcal && (
+        <Text style={styles.mealItemKcal}>{Math.round(kcal)} kcal</Text>
+      )}
+    </View>
+  );
+})}
                 </View>
                   </Card>
                 </Animated.View>

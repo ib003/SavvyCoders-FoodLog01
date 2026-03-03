@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, } from "react-native";
 
 interface Food {
-  id: string;
+  id: number | string;
   name: string;
   brand?: string;
   servingUnit?: string;
@@ -42,7 +42,7 @@ export default function AddSearch() {
   const [quantity, setQuantity] = useState("1");
   const [quantityModalVisible, setQuantityModalVisible] = useState(false);
   const [mealItems, setMealItems] = useState<MealItem[]>([]);
-  const [mealType, setMealType] = useState("breakfast");
+  const [mealType, setMealType] = useState("BREAKFAST");
   const [allergenAnalysis, setAllergenAnalysis] = useState<any>(null);
 
   const searchFoods = useCallback(async (query: string) => {
@@ -136,7 +136,7 @@ export default function AddSearch() {
     if (!selectedFood) return;
     
     const qty = parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1;
-    setMealItems([...mealItems, { food: selectedFood, qty }]);
+    setMealItems((prev) => [...prev, { food: selectedFood, qty }]);
     setQuantityModalVisible(false);
     setSelectedFood(null);
     setQuantity("1");
@@ -147,6 +147,11 @@ export default function AddSearch() {
     const newItems = mealItems.filter((_, i) => i !== index);
     setMealItems(newItems);
   };
+  const mealTypeToApi = (t: string) => {
+  const v = String(t || "").toUpperCase();
+  if (["BREAKFAST", "LUNCH", "DINNER", "SNACK"].includes(v)) return v;
+  return "BREAKFAST";
+};
  
   const handleSaveMeal = async () => {
     if (mealItems.length === 0) {
@@ -158,65 +163,68 @@ export default function AddSearch() {
       const rawToken = await auth.getToken(); 
 const token = rawToken?.replace(/^Bearer\s+/i, ""); 
 
-console.log("[SaveMeal] raw token =", rawToken);
-console.log("[SaveMeal] cleaned token =", token);
-console.log("[SaveMeal] auth header =", `Bearer ${token}`);
-
 if (!token) {
   Alert.alert("Not Authenticated", "Please log in to save meals.");
-  return;
-}
-
-      const now = new Date();
-      const response = await fetch(`${API_BASE}/meals`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          occurred_at: now.toISOString(),
-          meal_type: mealType,
-          items: mealItems.map((item) => ({
-          food_id: item.food.id ?? null,              //keep if it exists
-          externalId: item.food.externalId ?? null,   //allow server to resolve/create
-          name: item.food.name,
-          brand: item.food.brand ?? null,
-          kcal: getFoodKcal(item.food) || null,
-          qty: item.qty,
-          })),
-        }),
-      });
-      if (response.status === 401) {
-  Alert.alert("Session expired", "Please log in again.");
   router.replace("/");
   return;
 }
 
-      if (response.ok) {
-        Alert.alert(
-          "Success!",
-          "Your meal has been saved.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                setMealItems([]);
-                router.back();
-              },
-            },
-          ]
-        );
-      } else {
-        const msg = await response.text().catch(() => "");
-        throw new Error(msg || "Failed to save meal");
-      }
-    } catch (error) {
-      console.error("Save meal error:", error);
-      Alert.alert("Error", "Failed to save meal. Please try again.");
-    }
-  };
+    const payload = {
+      occurred_at: new Date().toISOString(),
+      meal_type: mealTypeToApi(mealType), 
+      items: mealItems.map((item) => ({
+        food_id: item.food.id ?? null,
+        externalId: item.food.externalId ?? null,
+        name: item.food.name,
+        brand: item.food.brand ?? null,
+        kcal: Math.round(getFoodKcalForQty(item.food, item.qty)),
+        qty: item.qty,
+        unit: item.food.servingUnit ?? "serving", 
+      })),
+    };
+    const total = Math.round(getTotalCalories());
+if (total <= 0) {
+  Alert.alert("Missing calories", "This food has no calorie info from the source.");
+  // optionally still allow saving if you want
+}
+    console.log("[SaveMeal] payload =", JSON.stringify(payload, null, 2));
+     const response = await fetch(`${API_BASE}/meals`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
 
+    const text = await response.text();
+    console.log("[SaveMeal] status =", response.status);
+    console.log("[SaveMeal] response =", text);
+
+    if (response.status === 401) {
+      Alert.alert("Session expired", "Please log in again.");
+      router.replace("/");
+      return;
+    }
+
+    if (!response.ok) {
+      throw new Error(text || "Failed to save meal");
+    }
+
+    Alert.alert("Success!", "Your meal has been saved.", [
+      {
+        text: "OK",
+        onPress: () => {
+          setMealItems([]);
+          router.push("/(tabs)/Dashboard"); 
+        },
+      },
+    ]);
+  } catch (error: any) {
+    console.error("Save meal error:", error);
+    Alert.alert("Error", error?.message || "Failed to save meal. Please try again.");
+  }
+};
    
 
   const getTotalCalories = () => {
@@ -247,6 +255,24 @@ if (!token) {
           )}
         </View>
       </View>
+      <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 16, marginTop: 8 }}>
+  {["BREAKFAST", "LUNCH", "DINNER", "SNACK"].map((t) => (
+    <TouchableOpacity
+      key={t}
+      onPress={() => setMealType(t)}
+      style={{
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: mealType === t ? Colors.primary.green : "#E0E0E0",
+        backgroundColor: mealType === t ? `${Colors.primary.green}15` : "white",
+      }}
+    >
+      <Text style={{ fontWeight: "700" }}>{t}</Text>
+    </TouchableOpacity>
+  ))}
+</View>
 
       {/* Meal Summary Bar */}
       {mealItems.length > 0 && (
