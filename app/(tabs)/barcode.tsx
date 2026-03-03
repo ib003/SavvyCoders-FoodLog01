@@ -1,3 +1,4 @@
+import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from "@/components/ui/KeyboardDismissAccessory";
 import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
@@ -13,6 +14,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   Modal,
   Pressable,
   ScrollView,
@@ -103,6 +105,7 @@ export default function AddBarcode() {
   };
 
   const handleReset = () => {
+    Keyboard.dismiss();
     setScanned(false);
     setFood(null);
     setError(null);
@@ -110,6 +113,11 @@ export default function AddBarcode() {
     setIsSafe(null);
     setAllergenAnalysis(null);
     setMealType("snack");
+  };
+
+  const closeQuantityModal = () => {
+    Keyboard.dismiss();
+    setQuantityModalVisible(false);
   };
 
   const handleAddToMeal = async () => {
@@ -294,11 +302,11 @@ const response = await fetch(url, {
         visible={quantityModalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => setQuantityModalVisible(false)}
+        onRequestClose={closeQuantityModal}
       >
         <Pressable
           style={styles.modalOverlay}
-          onPress={() => setQuantityModalVisible(false)}
+          onPress={closeQuantityModal}
         >
           <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -325,15 +333,22 @@ const response = await fetch(url, {
 
                   {/* Food Info */}
                   <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>{food.name}</Text>
-                    {food.brand && (
-                      <Text style={styles.modalBrand}>{food.brand}</Text>
-                    )}
-                    {food.servingUnit && (
-                      <Text style={styles.modalServing}>
-                        {food.servingQty || 1} {food.servingUnit}
-                      </Text>
-                    )}
+                    <View style={styles.modalHeaderRow}>
+                      <View style={styles.modalHeaderText}>
+                        <Text style={styles.modalTitle}>{food.name}</Text>
+                        {food.brand && (
+                          <Text style={styles.modalBrand}>{food.brand}</Text>
+                        )}
+                        {food.servingUnit && (
+                          <Text style={styles.modalServing}>
+                            {food.servingQty || 1} {food.servingUnit}
+                          </Text>
+                        )}
+                      </View>
+                      <TouchableOpacity style={styles.keyboardDismissButton} onPress={Keyboard.dismiss}>
+                        <FontAwesome name="times" size={16} color={Colors.neutral.textDark} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
 
                   {/* Allergen Warnings */}
@@ -363,6 +378,7 @@ const response = await fetch(url, {
                       style={styles.quantityInput}
                       value={quantity}
                       onChangeText={setQuantity}
+                      inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
                       keyboardType="decimal-pad"
                       placeholder="1"
                     />
@@ -381,7 +397,7 @@ const response = await fetch(url, {
                   <View style={styles.modalActions}>
                     <TouchableOpacity
                       style={[styles.modalButton, styles.cancelButton]}
-                      onPress={() => setQuantityModalVisible(false)}
+                      onPress={closeQuantityModal}
                     >
                       <Text style={styles.cancelButtonText}>Cancel</Text>
                     </TouchableOpacity>
@@ -398,6 +414,7 @@ const response = await fetch(url, {
           </Pressable>
         </Pressable>
       </Modal>
+      <KeyboardDismissAccessory />
     </View>
   );
 }
@@ -581,7 +598,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    maxHeight: "80%",
+    minHeight: "65%",
+    maxHeight: "94%",
   },
   safetyBadge: {
     flexDirection: "row",
@@ -606,6 +624,8 @@ const styles = StyleSheet.create({
   modalHeader: {
     marginBottom: 20,
   },
+  modalHeaderRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: Theme.spacing.md },
+  modalHeaderText: { flex: 1 },
   modalTitle: {
     fontSize: 24,
     fontWeight: "800",
@@ -621,6 +641,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.neutral.mutedGray,
   },
+  keyboardDismissButton: { width: 32, height: 32, borderRadius: Theme.radius.full, alignItems: "center", justifyContent: "center", backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0" },
 
   calorieCard: {
     backgroundColor: `${Colors.primary.green}10`,

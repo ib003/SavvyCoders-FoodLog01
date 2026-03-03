@@ -1,4 +1,5 @@
 import AllergenWarning from "@/components/AllergenWarning";
+import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from "@/components/ui/KeyboardDismissAccessory";
 import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { Colors } from "@/constants/Colors";
 import { Theme } from "@/constants/Theme";
@@ -11,7 +12,7 @@ import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, } from "react-native";
+import { ActivityIndicator, Alert, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, } from "react-native";
 
 interface Food {
   id: string;
@@ -137,14 +138,19 @@ export default function AddSearch() {
     setQuantityModalVisible(true);
   };
 
+  const closeQuantityModal = () => {
+    Keyboard.dismiss();
+    setQuantityModalVisible(false);
+    setSelectedFood(null);
+    setQuantity("1");
+  };
+
   const handleAddToMeal = () => {
     if (!selectedFood) return;
     
     const qty = parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1;
     setMealItems([...mealItems, { food: selectedFood, qty }]);
-    setQuantityModalVisible(false);
-    setSelectedFood(null);
-    setQuantity("1");
+    closeQuantityModal();
     Alert.alert("Added!", `${selectedFood.name} added to your meal.`);
   };
 
@@ -253,6 +259,7 @@ if (!token) {
             placeholderTextColor={Colors.neutral.mutedGray}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
             autoFocus
           />
           {searchQuery.length > 0 && (
@@ -386,20 +393,27 @@ if (!token) {
         visible={quantityModalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => setQuantityModalVisible(false)}
+        onRequestClose={closeQuantityModal}
       >
         <Pressable 
           style={styles.modalOverlay}
-          onPress={() => setQuantityModalVisible(false)}
+          onPress={closeQuantityModal}
         >
           <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
             {selectedFood && (
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{selectedFood.name}</Text>
-                  {selectedFood.brand && (
-                    <Text style={styles.modalBrand}>{selectedFood.brand}</Text>
-                  )}
+                  <View style={styles.modalHeaderRow}>
+                    <View style={styles.modalHeaderText}>
+                      <Text style={styles.modalTitle}>{selectedFood.name}</Text>
+                      {selectedFood.brand && (
+                        <Text style={styles.modalBrand}>{selectedFood.brand}</Text>
+                      )}
+                    </View>
+                    <TouchableOpacity style={styles.keyboardDismissButton} onPress={Keyboard.dismiss}>
+                      <FontAwesome name="times" size={16} color={Colors.neutral.textDark} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 {selectedFood && allergenAnalysis && (allergenAnalysis.hasAllergenWarning || allergenAnalysis.hasDietaryConflict) && (
@@ -415,8 +429,8 @@ if (!token) {
                     style={styles.quantityInput}
                     value={quantity}
                     onChangeText={setQuantity}
+                    inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
                     keyboardType="numbers-and-punctuation"
-                    onSubmitEditing={handleAddToMeal}
                     placeholder="1"
                   />
                   {selectedFood.servingUnit && (
@@ -442,7 +456,7 @@ if (!token) {
                 <View style={styles.modalActions}>
                   <TouchableOpacity
                     style={[styles.modalButton, styles.cancelButton]}
-                    onPress={() => setQuantityModalVisible(false)}
+                    onPress={closeQuantityModal}
                   >
                     <Text style={styles.cancelButtonText}>Cancel</Text>
                   </TouchableOpacity>
@@ -458,6 +472,7 @@ if (!token) {
           </Pressable>
         </Pressable>
       </Modal>
+      <KeyboardDismissAccessory />
     </View>
   );
 }
@@ -652,11 +667,14 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: Theme.radius["2xl"],
     borderTopRightRadius: Theme.radius["2xl"],
     padding: Theme.spacing["2xl"],
-    maxHeight: "80%",
+    minHeight: "65%",
+    maxHeight: "94%",
   },
   modalHeader: {
     marginBottom: Theme.spacing.xl,
   },
+  modalHeaderRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: Theme.spacing.md },
+  modalHeaderText: { flex: 1 },
   modalTitle: {
     fontSize: 22,
     fontWeight: "800",
@@ -667,6 +685,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.neutral.mutedGray,
   },
+  keyboardDismissButton: { width: 32, height: 32, borderRadius: Theme.radius.full, alignItems: "center", justifyContent: "center", backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0" },
   quantityContainer: {
     marginBottom: Theme.spacing.xl,
   },

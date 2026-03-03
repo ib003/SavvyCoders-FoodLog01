@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/Card";
 import { Divider } from "@/components/ui/Divider";
 import { GradientScreen } from "@/components/ui/GradientScreen";
+import { KeyboardDismissAccessory } from "@/components/ui/KeyboardDismissAccessory";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { SecondaryButton } from "@/components/ui/SecondaryButton";
 import { TextField } from "@/components/ui/TextField";
@@ -328,6 +329,7 @@ export default function Login() {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <KeyboardDismissAccessory />
     </GradientScreen>
   );
 }

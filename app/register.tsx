@@ -8,6 +8,7 @@ import { Animated, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView,
 import { API_BASE } from "@/src/constants/api";
 import { Theme } from "@/constants/Theme";
 import { GradientScreen } from "@/components/ui/GradientScreen";
+import { KeyboardDismissAccessory } from "@/components/ui/KeyboardDismissAccessory";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { SecondaryButton } from "@/components/ui/SecondaryButton";
 import { TextField } from "@/components/ui/TextField";
@@ -335,6 +336,7 @@ export default function Register() {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <KeyboardDismissAccessory />
     </GradientScreen>
   );
 }

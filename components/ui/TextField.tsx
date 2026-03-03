@@ -1,8 +1,9 @@
+import { KEYBOARD_DISMISS_ACCESSORY_ID } from '@/components/ui/KeyboardDismissAccessory';
 import { Theme } from '@/constants/Theme';
 import { useShake } from '@/src/ui/animations';
 import { FontAwesome } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
 
 interface TextFieldProps extends TextInputProps {
   label?: string;
@@ -75,8 +76,6 @@ export function TextField({
     outputRange: [Theme.colors.border.light, Theme.colors.primary.main],
   });
 
-  const errorBorderColor = error ? Theme.colors.semantic.error : borderColor;
-
   return (
     <Animated.View
       style={[
@@ -110,6 +109,7 @@ export function TextField({
         <TextInput
           style={[styles.input, style]}
           placeholderTextColor={Theme.colors.text.tertiary}
+          inputAccessoryViewID={Platform.OS === "ios" ? KEYBOARD_DISMISS_ACCESSORY_ID : undefined}
           onFocus={(e) => {
             setIsFocused(true);
             onFocus?.(e);

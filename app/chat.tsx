@@ -1,3 +1,4 @@
+import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from '@/components/ui/KeyboardDismissAccessory';
 import { Text, View } from '@/components/Themed';
 import { getSystemPrompt, sendMessageToChatGPT } from '@/src/lib/chatgpt';
 import { FontAwesome } from '@expo/vector-icons';
@@ -139,6 +140,7 @@ export default function ChatScreen() {
           style={styles.input}
           value={message}
           onChangeText={setMessage}
+          inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
           placeholder="Type a message..."
           placeholderTextColor="#999"
           multiline
@@ -157,6 +159,7 @@ export default function ChatScreen() {
           )}
         </TouchableOpacity>
       </KeyboardAvoidingView>
+      <KeyboardDismissAccessory />
 
       <StatusBar style={Platform.OS === 'ios' ? 'light' : 'auto'} />
     </View>

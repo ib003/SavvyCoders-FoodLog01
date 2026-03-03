@@ -2,6 +2,7 @@ import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
 import { auth } from "@/src/lib/auth";
 import AllergenWarning from "@/components/AllergenWarning";
+import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from "@/components/ui/KeyboardDismissAccessory";
 import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { Colors } from "@/constants/Colors";
 import { Theme } from "@/constants/Theme";
@@ -358,6 +359,7 @@ export default function AddBarcode() {
                       style={styles.quantityInput}
                       value={quantity}
                       onChangeText={setQuantity}
+                      inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
                       keyboardType="decimal-pad"
                       placeholder="1"
                     />
@@ -393,6 +395,7 @@ export default function AddBarcode() {
           </Pressable>
         </Pressable>
       </Modal>
+      <KeyboardDismissAccessory />
     </View>
   );
 }

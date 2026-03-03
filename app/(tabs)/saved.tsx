@@ -1,3 +1,4 @@
+import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from "@/components/ui/KeyboardDismissAccessory";
 import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { Colors } from "@/constants/Colors";
 import { Theme } from "@/constants/Theme";
@@ -8,6 +9,7 @@ import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Keyboard } from "react-native";
 import {
   ActivityIndicator,
   Alert,
@@ -131,6 +133,7 @@ export default function AddSaved() {
   };
 
   const closeModal = () => {
+    Keyboard.dismiss();
     setQuantityModalVisible(false);
     setSelectedFood(null);
     setQuantity("1");
@@ -176,6 +179,7 @@ export default function AddSaved() {
             placeholderTextColor={Colors.neutral.mutedGray}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery("")}>
@@ -276,8 +280,15 @@ export default function AddSaved() {
             {selectedFood && (
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{selectedFood.name}</Text>
-                  {selectedFood.brand && <Text style={styles.modalBrand}>{selectedFood.brand}</Text>}
+                  <View style={styles.modalHeaderRow}>
+                    <View style={styles.modalHeaderText}>
+                      <Text style={styles.modalTitle}>{selectedFood.name}</Text>
+                      {selectedFood.brand && <Text style={styles.modalBrand}>{selectedFood.brand}</Text>}
+                    </View>
+                    <TouchableOpacity style={styles.keyboardDismissButton} onPress={Keyboard.dismiss}>
+                      <FontAwesome name="times" size={16} color={Colors.neutral.textDark} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 <View style={styles.quantityContainer}>
@@ -286,6 +297,7 @@ export default function AddSaved() {
                     style={styles.quantityInput}
                     value={quantity}
                     onChangeText={setQuantity}
+                    inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
                     keyboardType="decimal-pad"
                     placeholder="1"
                   />
@@ -318,6 +330,7 @@ export default function AddSaved() {
           </Pressable>
         </Pressable>
       </Modal>
+      <KeyboardDismissAccessory />
     </View>
   );
 }
@@ -478,10 +491,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "flex-end" },
-  modalContent: { backgroundColor: Colors.neutral.cardSurface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
+  modalContent: { backgroundColor: Colors.neutral.cardSurface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, minHeight: "65%", maxHeight: "94%" },
   modalHeader: { marginBottom: 20 },
+  modalHeaderRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: Theme.spacing.md },
+  modalHeaderText: { flex: 1 },
   modalTitle: { fontSize: 22, fontWeight: "800", color: Colors.neutral.textDark, marginBottom: 4 },
   modalBrand: { fontSize: 14, color: Colors.neutral.mutedGray },
+  keyboardDismissButton: { width: 32, height: 32, borderRadius: Theme.radius.full, alignItems: "center", justifyContent: "center", backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0" },
   quantityContainer: { marginBottom: 20 },
   quantityLabel: { fontSize: 14, fontWeight: "600", color: Colors.neutral.textDark, marginBottom: 8 },
   quantityInput: {
