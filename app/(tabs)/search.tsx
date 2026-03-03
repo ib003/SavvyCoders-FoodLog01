@@ -271,7 +271,8 @@ if (!token) {
       occurred_at: new Date().toISOString(),
       meal_type: mealTypeToApi(mealType), 
       items: mealItems.map((item) => ({
-       food_id: item.food.source === "FDC_API" ? null : item.food.id ?? null,        externalId: item.food.externalId ?? null,
+        food_id: item.food.source === "FDC_API" ? null : item.food.id ?? null,
+        externalId: item.food.externalId ?? null,
         name: item.food.name,
         brand: item.food.brand ?? null,
         source: item.food.source ?? "UPC_API",
@@ -550,13 +551,13 @@ if (total <= 0) {
                 <View style={styles.quantityContainer}>
                   <Text style={styles.quantityLabel}>Servings</Text>
                   <TextInput
-                    style={styles.quantityInput}
-                    value={quantity}
-                    onChangeText={setQuantity}
-                    keyboardType="numbers-and-punctuation"
-                    inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
-                    placeholder="1"
-                  />
+  style={styles.quantityInput}
+  value={quantity}
+  onChangeText={setQuantity}
+  inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
+  keyboardType="numbers-and-punctuation"
+  placeholder="1"
+/>
                   <Text style={styles.quantityUnit}>{getServingText(selectedFood)}</Text>
                 </View>
 
@@ -567,9 +568,6 @@ if (total <= 0) {
                     </Text>
                     <Text style={styles.macroPreviewText}>
                       P {Math.round(getFoodProtein(selectedFood) * getParsedQty())}g • C {Math.round(getFoodCarbs(selectedFood) * getParsedQty())}g • F {Math.round(getFoodFat(selectedFood) * getParsedQty())}g
-                    </Text>
-                    <Text style={styles.quantityUnit}>
-                      P {Math.round(getFoodProtein(selectedFood) * (parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1))}g • C {Math.round(getFoodCarbs(selectedFood) * (parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1))}g • F {Math.round(getFoodFat(selectedFood) * (parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1))}g
                     </Text>
                   </View>
                 )}
