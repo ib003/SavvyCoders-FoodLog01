@@ -568,6 +568,9 @@ if (total <= 0) {
                     <Text style={styles.macroPreviewText}>
                       P {Math.round(getFoodProtein(selectedFood) * getParsedQty())}g • C {Math.round(getFoodCarbs(selectedFood) * getParsedQty())}g • F {Math.round(getFoodFat(selectedFood) * getParsedQty())}g
                     </Text>
+                    <Text style={styles.quantityUnit}>
+                      P {Math.round(getFoodProtein(selectedFood) * (parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1))}g • C {Math.round(getFoodCarbs(selectedFood) * (parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1))}g • F {Math.round(getFoodFat(selectedFood) * (parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1))}g
+                    </Text>
                   </View>
                 )}
 
