@@ -2,6 +2,7 @@ import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
 import { auth } from "@/src/lib/auth";
 import AllergenWarning from "@/components/AllergenWarning";
+import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { Colors } from "@/constants/Colors";
 import { Theme } from "@/constants/Theme";
 import { FontAwesome } from "@expo/vector-icons";
@@ -19,6 +20,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { MealTypeValue } from "@/src/lib/mealTypes";
 
 interface Food {
   id: string;
@@ -44,7 +46,7 @@ export default function AddSearch() {
   const [quantity, setQuantity] = useState("1");
   const [quantityModalVisible, setQuantityModalVisible] = useState(false);
   const [mealItems, setMealItems] = useState<MealItem[]>([]);
-  const [mealType, setMealType] = useState("breakfast");
+  const [mealType, setMealType] = useState<MealTypeValue>("breakfast");
   const [allergenAnalysis, setAllergenAnalysis] = useState<any>(null);
 
   const searchFoods = useCallback(async (query: string) => {
@@ -221,6 +223,10 @@ if (!response.ok) {
           </View>
         </View>
       )}
+
+      <View style={styles.mealTypeSection}>
+        <MealTypeSelector value={mealType} onChange={setMealType} />
+      </View>
 
       {/* Meal Items Preview */}
       {mealItems.length > 0 && (
@@ -433,6 +439,14 @@ const styles = StyleSheet.create({
   mealItemsPreview: {
     maxHeight: 60,
     backgroundColor: Colors.neutral.cardSurface,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  mealTypeSection: {
+    backgroundColor: Colors.neutral.cardSurface,
+    paddingHorizontal: Theme.spacing.lg,
+    paddingTop: Theme.spacing.md,
+    paddingBottom: Theme.spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
