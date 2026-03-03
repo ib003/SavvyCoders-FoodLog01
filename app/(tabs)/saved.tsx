@@ -140,6 +140,11 @@ export default function AddSaved() {
     setMealType("snack");
   };
 
+  const getServingText = (food: Food) => {
+    const kcal = food.kcal ? Math.round(food.kcal) : 0;
+    return kcal > 0 ? `${kcal} kcal per serving` : "Calories vary by serving";
+  };
+
   const filteredRows = savedRows.filter((row) => {
     const food = row.food as Food;
     return (
@@ -285,23 +290,22 @@ export default function AddSaved() {
                       <Text style={styles.modalTitle}>{selectedFood.name}</Text>
                       {selectedFood.brand && <Text style={styles.modalBrand}>{selectedFood.brand}</Text>}
                     </View>
-                    <TouchableOpacity style={styles.keyboardDismissButton} onPress={Keyboard.dismiss}>
+                    <TouchableOpacity style={styles.keyboardDismissButton} onPress={closeModal}>
                       <FontAwesome name="times" size={16} color={Colors.neutral.textDark} />
                     </TouchableOpacity>
                   </View>
                 </View>
 
                 <View style={styles.quantityContainer}>
-                  <Text style={styles.quantityLabel}>Quantity</Text>
+                  <Text style={styles.quantityLabel}>Servings</Text>
                   <TextInput
                     style={styles.quantityInput}
                     value={quantity}
                     onChangeText={setQuantity}
-                    inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
                     keyboardType="decimal-pad"
                     placeholder="1"
                   />
-                  {selectedFood.servingUnit && <Text style={styles.quantityUnit}>{selectedFood.servingUnit}</Text>}
+                  <Text style={styles.quantityUnit}>{getServingText(selectedFood)}</Text>
                 </View>
 
                 <MealTypeSelector

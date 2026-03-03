@@ -1,4 +1,3 @@
-import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from "@/components/ui/KeyboardDismissAccessory";
 import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
@@ -93,6 +92,7 @@ export default function AddBarcode() {
       // Determine if safe
       const safe = !analysis.hasAllergenWarning && !analysis.hasDietaryConflict;
       setIsSafe(safe);
+      setQuantity("1");
 
       setQuantityModalVisible(true);
     } catch (err: any) {
@@ -118,6 +118,11 @@ export default function AddBarcode() {
   const closeQuantityModal = () => {
     Keyboard.dismiss();
     setQuantityModalVisible(false);
+  };
+
+  const getServingText = (foodItem: Food) => {
+    const kcal = foodItem.kcal ? Math.round(foodItem.kcal) : 0;
+    return kcal > 0 ? `${kcal} kcal per serving` : "Calories vary by serving";
   };
 
   const handleAddToMeal = async () => {
@@ -345,7 +350,7 @@ const response = await fetch(url, {
                           </Text>
                         )}
                       </View>
-                      <TouchableOpacity style={styles.keyboardDismissButton} onPress={Keyboard.dismiss}>
+                      <TouchableOpacity style={styles.keyboardDismissButton} onPress={closeQuantityModal}>
                         <FontAwesome name="times" size={16} color={Colors.neutral.textDark} />
                       </TouchableOpacity>
                     </View>
@@ -373,18 +378,15 @@ const response = await fetch(url, {
 
                   {/* Quantity Input */}
                   <View style={styles.quantityContainer}>
-                    <Text style={styles.quantityLabel}>Quantity</Text>
+                    <Text style={styles.quantityLabel}>Servings</Text>
                     <TextInput
                       style={styles.quantityInput}
                       value={quantity}
                       onChangeText={setQuantity}
-                      inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
                       keyboardType="decimal-pad"
                       placeholder="1"
                     />
-                    {food.servingUnit && (
-                      <Text style={styles.quantityUnit}>{food.servingUnit}</Text>
-                    )}
+                    <Text style={styles.quantityUnit}>{getServingText(food)}</Text>
                   </View>
 
                   <MealTypeSelector
@@ -414,7 +416,6 @@ const response = await fetch(url, {
           </Pressable>
         </Pressable>
       </Modal>
-      <KeyboardDismissAccessory />
     </View>
   );
 }

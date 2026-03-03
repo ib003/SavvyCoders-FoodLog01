@@ -86,18 +86,12 @@ export default function AddSearch() {
 
   const getFoodKcalForQty = (food: Food, qty: number) => {
     const baseKcal = getFoodKcal(food);
-
-    // If servingUnit is grams and servingQty exists (often "100 g"),
-    // scale calories proportionally. Otherwise treat qty as "servings".
-    const unit = String(food.servingUnit ?? "").toLowerCase();
-    const baseQty = Number(food.servingQty);
-
-    const looksLikeGrams = unit === "g" || unit.includes("gram");
-    if (looksLikeGrams && Number.isFinite(baseQty) && baseQty > 0) {
-      return baseKcal * (qty / baseQty);
-    }
-
     return baseKcal * qty;
+  };
+
+  const getServingText = (food: Food) => {
+    const kcal = Math.round(getFoodKcal(food));
+    return kcal > 0 ? `${kcal} kcal per serving` : "Calories vary by serving";
   };
   const handleSaveFood = async (food: Food) => {
   try {
@@ -126,6 +120,7 @@ export default function AddSearch() {
 
   const handleFoodSelect = async (food: Food) => {
     setSelectedFood(food);
+    setQuantity("1");
     
     // Check for allergens
     const foodTags = [food.name.toLowerCase()];
@@ -410,7 +405,7 @@ if (!token) {
                         <Text style={styles.modalBrand}>{selectedFood.brand}</Text>
                       )}
                     </View>
-                    <TouchableOpacity style={styles.keyboardDismissButton} onPress={Keyboard.dismiss}>
+                    <TouchableOpacity style={styles.keyboardDismissButton} onPress={closeQuantityModal}>
                       <FontAwesome name="times" size={16} color={Colors.neutral.textDark} />
                     </TouchableOpacity>
                   </View>
@@ -424,18 +419,15 @@ if (!token) {
                 )}
 
                 <View style={styles.quantityContainer}>
-                  <Text style={styles.quantityLabel}>Quantity</Text>
+                  <Text style={styles.quantityLabel}>Servings</Text>
                   <TextInput
                     style={styles.quantityInput}
                     value={quantity}
                     onChangeText={setQuantity}
-                    inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
                     keyboardType="numbers-and-punctuation"
                     placeholder="1"
                   />
-                  {selectedFood.servingUnit && (
-                    <Text style={styles.quantityUnit}>{selectedFood.servingUnit}</Text>
-                  )}
+                  <Text style={styles.quantityUnit}>{getServingText(selectedFood)}</Text>
                 </View>
 
                 {selectedFood && (
