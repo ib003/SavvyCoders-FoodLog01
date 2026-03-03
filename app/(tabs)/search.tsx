@@ -199,14 +199,12 @@ export default function AddSearch() {
   const handleFoodSelect = async (food: Food) => {
     setSelectedFood(food);
     setQuantity("1");
-
     const foodTags = [
       food.name.toLowerCase(),
       ...(food.brand ? [food.brand.toLowerCase()] : []),
       ...getFoodIngredients(food).map((i) => String(i).toLowerCase()),
       ...getFoodAllergens(food).map((a) => String(a).toLowerCase()),
     ];
-
     const analysis = await analyzeFood(foodTags);
     setAllergenAnalysis(analysis);
     setQuantityModalVisible(true);

@@ -1,4 +1,3 @@
-import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from "@/components/ui/KeyboardDismissAccessory";
 import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
@@ -384,7 +383,6 @@ const response = await fetch(url, {
                       style={styles.quantityInput}
                       value={quantity}
                       onChangeText={setQuantity}
-                      inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
                       keyboardType="decimal-pad"
                       placeholder="1"
                     />
@@ -418,7 +416,6 @@ const response = await fetch(url, {
           </Pressable>
         </Pressable>
       </Modal>
-      <KeyboardDismissAccessory />
     </View>
   );
 }

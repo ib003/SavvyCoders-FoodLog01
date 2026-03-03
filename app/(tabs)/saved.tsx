@@ -302,7 +302,6 @@ export default function AddSaved() {
                     style={styles.quantityInput}
                     value={quantity}
                     onChangeText={setQuantity}
-                    inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
                     keyboardType="decimal-pad"
                     placeholder="1"
                   />
