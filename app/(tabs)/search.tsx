@@ -10,6 +10,7 @@ import { MealTypeValue } from "@/src/lib/mealTypes";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, } from "react-native";
 
 interface Food {
@@ -38,6 +39,7 @@ interface MealItem {
 
 export default function AddSearch() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState("");
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(false);
@@ -150,6 +152,10 @@ export default function AddSearch() {
     const newItems = mealItems.filter((_, i) => i !== index);
     setMealItems(newItems);
   };
+
+  const handleBackToAddMeal = () => {
+    router.replace("/(tabs)/AddMeal");
+  };
  
   const handleSaveMeal = async () => {
     if (mealItems.length === 0) {
@@ -231,9 +237,15 @@ if (!token) {
 
   return (
     <View style={styles.container}>
+      <View style={[styles.topSafeArea, { height: insets.top }]} />
       {/* Search Header */}
       <View style={styles.searchHeader}>
-        <View style={styles.searchContainer}>
+        <View style={styles.searchHeaderRow}>
+          <TouchableOpacity style={styles.backButton} onPress={handleBackToAddMeal}>
+            <FontAwesome name="arrow-left" size={18} color={Colors.neutral.textDark} />
+          </TouchableOpacity>
+
+          <View style={styles.searchContainer}>
           <FontAwesome name="search" size={18} color={Colors.neutral.mutedGray} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
@@ -248,6 +260,7 @@ if (!token) {
               <FontAwesome name="times-circle" size={18} color={Colors.neutral.mutedGray} />
             </TouchableOpacity>
           )}
+        </View>
         </View>
       </View>
 
@@ -454,13 +467,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.neutral.backgroundLight,
   },
+  topSafeArea: { backgroundColor: "#000000" },
   searchHeader: {
     backgroundColor: Colors.neutral.cardSurface,
     padding: Theme.spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
+  searchHeaderRow: { flexDirection: "row", alignItems: "center", gap: Theme.spacing.md },
+  backButton: { width: 40, height: 40, borderRadius: Theme.radius.full, alignItems: "center", justifyContent: "center", backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0" },
   searchContainer: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.neutral.backgroundLight,

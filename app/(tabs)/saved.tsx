@@ -7,6 +7,7 @@ import { MealTypeValue } from "@/src/lib/mealTypes";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
   Alert,
@@ -32,6 +33,7 @@ interface Food {
 
 export default function AddSaved() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [savedRows, setSavedRows] = useState<SavedFoodRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -72,6 +74,10 @@ export default function AddSaved() {
     setQuantity("1");
     setMealType("snack");
     setQuantityModalVisible(true);
+  };
+
+  const handleBackToAddMeal = () => {
+    router.replace("/(tabs)/AddMeal");
   };
 
   const handleSaveMeal = async () => {
@@ -150,8 +156,14 @@ export default function AddSaved() {
 
   return (
     <View style={styles.container}>
+      <View style={[styles.topSafeArea, { height: insets.top }]} />
       <View style={styles.searchHeader}>
-        <View style={styles.searchContainer}>
+        <View style={styles.searchHeaderRow}>
+          <TouchableOpacity style={styles.backButton} onPress={handleBackToAddMeal}>
+            <FontAwesome name="arrow-left" size={18} color={Colors.neutral.textDark} />
+          </TouchableOpacity>
+
+          <View style={styles.searchContainer}>
           <FontAwesome
             name="search"
             size={18}
@@ -170,6 +182,7 @@ export default function AddSaved() {
               <FontAwesome name="times-circle" size={18} color={Colors.neutral.mutedGray} />
             </TouchableOpacity>
           )}
+        </View>
         </View>
       </View>
 
@@ -314,13 +327,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.neutral.backgroundLight,
   },
+  topSafeArea: { backgroundColor: "#000000" },
   searchHeader: {
     backgroundColor: Colors.neutral.cardSurface,
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
+  searchHeaderRow: { flexDirection: "row", alignItems: "center", gap: Theme.spacing.md },
+  backButton: { width: 40, height: 40, borderRadius: Theme.radius.full, alignItems: "center", justifyContent: "center", backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0" },
   searchContainer: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.neutral.backgroundLight,
