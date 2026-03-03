@@ -1,10 +1,17 @@
+import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { Colors } from "@/constants/Colors";
+import { Theme } from "@/constants/Theme";
+import { API_BASE } from "@/src/constants/api";
+import { auth } from "@/src/lib/auth";
+import { MealTypeValue } from "@/src/lib/mealTypes";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -28,6 +35,11 @@ export default function AddSaved() {
   const [savedRows, setSavedRows] = useState<SavedFoodRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFood, setSelectedFood] = useState<Food | null>(null);
+  const [quantity, setQuantity] = useState("1");
+  const [mealType, setMealType] = useState<MealTypeValue>("snack");
+  const [quantityModalVisible, setQuantityModalVisible] = useState(false);
+  const [savingMeal, setSavingMeal] = useState(false);
 
   useEffect(() => {
     loadSavedFoods();
@@ -56,15 +68,67 @@ export default function AddSaved() {
   };
 
   const handleAddFood = (food: Food) => {
-    Alert.alert("Add to Meal", `Would you like to add "${food.name}" to your meal?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Add",
-        onPress: () => {
-          Alert.alert("Added!", `Adding ${food.name} to meal...`);
+    setSelectedFood(food);
+    setQuantity("1");
+    setMealType("snack");
+    setQuantityModalVisible(true);
+  };
+
+  const handleSaveMeal = async () => {
+    if (!selectedFood) return;
+
+    try {
+      setSavingMeal(true);
+      const token = await auth.getToken();
+
+      if (!token) {
+        Alert.alert("Not Authenticated", "Please log in to add meals.");
+        return;
+      }
+
+      const qty = parseFloat(quantity) || 1;
+      const mealItem = {
+        food_id: selectedFood.id,
+        name: selectedFood.name,
+        brand: selectedFood.brand ?? null,
+        kcal: selectedFood.kcal ?? null,
+        qty,
+      };
+
+      const mealData = {
+        occurred_at: new Date().toISOString(),
+        meal_type: mealType,
+        items: [mealItem],
+      };
+
+      const response = await fetch(`${API_BASE}/meals`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-      },
-    ]);
+        body: JSON.stringify(mealData),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save meal");
+      }
+
+      const successMessage = `${selectedFood.name} was added to your ${mealType}.`;
+      Alert.alert("Success!", successMessage, [{ text: "OK", onPress: closeModal }]);
+    } catch (error) {
+      console.error("Failed to add saved food to meal:", error);
+      Alert.alert("Error", "Failed to add food to meal");
+    } finally {
+      setSavingMeal(false);
+    }
+  };
+
+  const closeModal = () => {
+    setQuantityModalVisible(false);
+    setSelectedFood(null);
+    setQuantity("1");
+    setMealType("snack");
   };
 
   const filteredRows = savedRows.filter((row) => {
@@ -173,7 +237,12 @@ export default function AddSaved() {
                     </View>
                   ) : null}
 
-                  <TouchableOpacity onPress={() => handleRemove(row.id)}>
+                  <TouchableOpacity
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      handleRemove(row.id);
+                    }}
+                  >
                     <FontAwesome name="trash" size={22} color={Colors.primary.orange} />
                   </TouchableOpacity>
                 </TouchableOpacity>
@@ -182,6 +251,60 @@ export default function AddSaved() {
           </>
         )}
       </ScrollView>
+
+      <Modal
+        visible={quantityModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeModal}
+      >
+        <Pressable style={styles.modalOverlay} onPress={closeModal}>
+          <Pressable style={styles.modalContent} onPress={(event) => event.stopPropagation()}>
+            {selectedFood && (
+              <>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{selectedFood.name}</Text>
+                  {selectedFood.brand && <Text style={styles.modalBrand}>{selectedFood.brand}</Text>}
+                </View>
+
+                <View style={styles.quantityContainer}>
+                  <Text style={styles.quantityLabel}>Quantity</Text>
+                  <TextInput
+                    style={styles.quantityInput}
+                    value={quantity}
+                    onChangeText={setQuantity}
+                    keyboardType="decimal-pad"
+                    placeholder="1"
+                  />
+                  {selectedFood.servingUnit && <Text style={styles.quantityUnit}>{selectedFood.servingUnit}</Text>}
+                </View>
+
+                <MealTypeSelector
+                  value={mealType}
+                  onChange={setMealType}
+                  style={styles.mealTypeSelector}
+                />
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={closeModal}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.addButton, savingMeal ? styles.addButtonDisabled : null]}
+                    onPress={handleSaveMeal}
+                    disabled={savingMeal}
+                  >
+                    <Text style={styles.addButtonText}>{savingMeal ? "Saving..." : "Add to Meal"}</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -337,4 +460,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "flex-end" },
+  modalContent: { backgroundColor: Colors.neutral.cardSurface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
+  modalHeader: { marginBottom: 20 },
+  modalTitle: { fontSize: 22, fontWeight: "800", color: Colors.neutral.textDark, marginBottom: 4 },
+  modalBrand: { fontSize: 14, color: Colors.neutral.mutedGray },
+  quantityContainer: { marginBottom: 20 },
+  quantityLabel: { fontSize: 14, fontWeight: "600", color: Colors.neutral.textDark, marginBottom: 8 },
+  quantityInput: {
+    backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0",
+    borderRadius: 12, padding: 16, fontSize: 18, fontWeight: "600", color: Colors.neutral.textDark,
+  },
+  quantityUnit: { marginTop: 8, fontSize: 13, color: Colors.neutral.mutedGray },
+  mealTypeSelector: { marginBottom: Theme.spacing.lg },
+  modalActions: { flexDirection: "row", gap: Theme.spacing.md },
+  modalButton: { flex: 1, padding: 16, borderRadius: 12, alignItems: "center" },
+  cancelButton: { backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0" },
+  cancelButtonText: { fontSize: 16, fontWeight: "600", color: Colors.neutral.textDark },
+  addButton: { backgroundColor: Colors.primary.green },
+  addButtonDisabled: { opacity: 0.7 },
+  addButtonText: { fontSize: 16, fontWeight: "700", color: "#FFFFFF" },
 });
