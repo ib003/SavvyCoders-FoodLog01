@@ -10,6 +10,7 @@ interface TextFieldProps extends TextInputProps {
   icon?: keyof typeof FontAwesome.glyphMap;
   rightIcon?: React.ReactNode;
   containerStyle?: any;
+  shakeTrigger?: number;
 }
 
 export function TextField({
@@ -18,6 +19,7 @@ export function TextField({
   icon,
   rightIcon,
   containerStyle,
+  shakeTrigger = 0,
   style,
   onFocus,
   onBlur,
@@ -27,6 +29,7 @@ export function TextField({
   const { translateX, shake } = useShake();
   const borderColorAnim = useRef(new Animated.Value(0)).current;
   const glowOpacityAnim = useRef(new Animated.Value(0)).current;
+  const previousShakeTrigger = useRef(shakeTrigger);
 
   // Animate border color on focus
   useEffect(() => {
@@ -59,12 +62,13 @@ export function TextField({
     }
   }, [isFocused]);
 
-  // Shake animation on error
+  // Shake only when the parent explicitly asks for it.
   useEffect(() => {
-    if (error) {
+    if (shakeTrigger > previousShakeTrigger.current) {
       shake();
     }
-  }, [error, shake]);
+    previousShakeTrigger.current = shakeTrigger;
+  }, [shakeTrigger, shake]);
 
   const borderColor = borderColorAnim.interpolate({
     inputRange: [0, 1],
