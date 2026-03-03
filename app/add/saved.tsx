@@ -1,3 +1,4 @@
+import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from "@/components/ui/KeyboardDismissAccessory";
 import { API_BASE } from "@/src/constants/api";
 import { auth } from "@/src/lib/auth";
 import { Colors } from "@/constants/Colors";
@@ -134,6 +135,7 @@ export default function AddSaved() {
             placeholderTextColor={Colors.neutral.mutedGray}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery("")}>
@@ -213,6 +215,7 @@ export default function AddSaved() {
           </>
         )}
       </ScrollView>
+      <KeyboardDismissAccessory />
     </View>
   );
 }

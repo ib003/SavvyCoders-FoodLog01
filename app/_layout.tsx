@@ -66,6 +66,7 @@ function RootLayoutNav() {
 
         const token = await auth.getToken();
         const inAuthGroup = segs[0] === '(tabs)';
+        const isAllowedModalRoute = segs[0] === 'chat' || segs[0] === 'modal';
         const hasValidToken = token && typeof token === 'string' && token.length >= 20;
         
 
@@ -83,7 +84,7 @@ function RootLayoutNav() {
           // User is in protected area but has no token - redirect to login
           console.log('[RootLayout] No valid token in protected area, redirecting to login');
           router.replace('/');
-        } else if (hasValidToken && !inAuthGroup && segs[0] !== 'register' && !isInitialLoad) {
+        } else if (hasValidToken && !inAuthGroup && segs[0] !== 'register' && !isAllowedModalRoute && !isInitialLoad) {
           // User has token but is on login screen - redirect to tabs
           // But only if not on initial load (to prevent redirect loops)
           console.log('[RootLayout] Valid token found, redirecting to tabs');

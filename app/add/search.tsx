@@ -2,6 +2,8 @@ import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
 import { auth } from "@/src/lib/auth";
 import AllergenWarning from "@/components/AllergenWarning";
+import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from "@/components/ui/KeyboardDismissAccessory";
+import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { Colors } from "@/constants/Colors";
 import { Theme } from "@/constants/Theme";
 import { FontAwesome } from "@expo/vector-icons";
@@ -19,6 +21,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { MealTypeValue } from "@/src/lib/mealTypes";
 
 interface Food {
   id: string;
@@ -44,7 +47,7 @@ export default function AddSearch() {
   const [quantity, setQuantity] = useState("1");
   const [quantityModalVisible, setQuantityModalVisible] = useState(false);
   const [mealItems, setMealItems] = useState<MealItem[]>([]);
-  const [mealType, setMealType] = useState("breakfast");
+  const [mealType, setMealType] = useState<MealTypeValue>("breakfast");
   const [allergenAnalysis, setAllergenAnalysis] = useState<any>(null);
 
   const searchFoods = useCallback(async (query: string) => {
@@ -198,6 +201,7 @@ if (!response.ok) {
             placeholderTextColor={Colors.neutral.mutedGray}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
             autoFocus
           />
           {searchQuery.length > 0 && (
@@ -221,6 +225,10 @@ if (!response.ok) {
           </View>
         </View>
       )}
+
+      <View style={styles.mealTypeSection}>
+        <MealTypeSelector value={mealType} onChange={setMealType} />
+      </View>
 
       {/* Meal Items Preview */}
       {mealItems.length > 0 && (
@@ -333,13 +341,14 @@ if (!response.ok) {
 
                 <View style={styles.quantityContainer}>
                   <Text style={styles.quantityLabel}>Quantity</Text>
-                  <TextInput
+                    <TextInput
                     style={styles.quantityInput}
-                    value={quantity}
-                    onChangeText={setQuantity}
-                    keyboardType="decimal-pad"
-                    placeholder="1"
-                  />
+                      value={quantity}
+                      onChangeText={setQuantity}
+                      inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
+                      keyboardType="decimal-pad"
+                      placeholder="1"
+                    />
                   {selectedFood.servingUnit && (
                     <Text style={styles.quantityUnit}>{selectedFood.servingUnit}</Text>
                   )}
@@ -372,6 +381,7 @@ if (!response.ok) {
           </Pressable>
         </Pressable>
       </Modal>
+      <KeyboardDismissAccessory />
     </View>
   );
 }
@@ -433,6 +443,14 @@ const styles = StyleSheet.create({
   mealItemsPreview: {
     maxHeight: 60,
     backgroundColor: Colors.neutral.cardSurface,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  mealTypeSection: {
+    backgroundColor: Colors.neutral.cardSurface,
+    paddingHorizontal: Theme.spacing.lg,
+    paddingTop: Theme.spacing.md,
+    paddingBottom: Theme.spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
