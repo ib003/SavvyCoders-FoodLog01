@@ -1,8 +1,11 @@
+import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
 import { auth } from "@/src/lib/auth";
+import { MealTypeValue } from "@/src/lib/mealTypes";
 import AllergenWarning from "@/components/AllergenWarning";
 import { Colors } from "@/constants/Colors";
+import { Theme } from "@/constants/Theme";
 import { FontAwesome } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
@@ -43,6 +46,7 @@ export default function AddBarcode() {
   const [quantityModalVisible, setQuantityModalVisible] = useState(false);
   const [allergenAnalysis, setAllergenAnalysis] = useState<any>(null);
   const [isSafe, setIsSafe] = useState<boolean | null>(null);
+  const [mealType, setMealType] = useState<MealTypeValue>("snack");
 
   useEffect(() => {
     if (!permission) {
@@ -105,6 +109,7 @@ export default function AddBarcode() {
     setQuantity("1");
     setIsSafe(null);
     setAllergenAnalysis(null);
+    setMealType("snack");
   };
 
   const handleAddToMeal = async () => {
@@ -129,7 +134,7 @@ const response = await fetch(url, {
   },
   body: JSON.stringify({
     occurred_at: now.toISOString(),
-    meal_type: "snack",
+    meal_type: mealType,
     items: [
       {
         food_id: food.id,
@@ -365,6 +370,12 @@ const response = await fetch(url, {
                       <Text style={styles.quantityUnit}>{food.servingUnit}</Text>
                     )}
                   </View>
+
+                  <MealTypeSelector
+                    value={mealType}
+                    onChange={setMealType}
+                    style={styles.mealTypeSelector}
+                  />
 
                   {/* Actions */}
                   <View style={styles.modalActions}>
@@ -653,6 +664,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 13,
     color: Colors.neutral.mutedGray,
+  },
+  mealTypeSelector: {
+    marginBottom: 20,
   },
   modalActions: {
     flexDirection: "row",

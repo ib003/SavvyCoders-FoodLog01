@@ -2,7 +2,9 @@ import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
 import { auth } from "@/src/lib/auth";
 import AllergenWarning from "@/components/AllergenWarning";
+import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { Colors } from "@/constants/Colors";
+import { Theme } from "@/constants/Theme";
 import { FontAwesome } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
@@ -19,6 +21,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { MealTypeValue } from "@/src/lib/mealTypes";
 
 interface Food {
   id: string;
@@ -43,6 +46,7 @@ export default function AddBarcode() {
   const [quantityModalVisible, setQuantityModalVisible] = useState(false);
   const [allergenAnalysis, setAllergenAnalysis] = useState<any>(null);
   const [isSafe, setIsSafe] = useState<boolean | null>(null);
+  const [mealType, setMealType] = useState<MealTypeValue>("snack");
 
   useEffect(() => {
     if (!permission) {
@@ -105,6 +109,7 @@ export default function AddBarcode() {
     setQuantity("1");
     setIsSafe(null);
     setAllergenAnalysis(null);
+    setMealType("snack");
   };
 
   const handleAddToMeal = async () => {
@@ -126,7 +131,7 @@ export default function AddBarcode() {
         },
         body: JSON.stringify({
           occurred_at: now.toISOString(),
-          meal_type: "snack",
+          meal_type: mealType,
           items: [{
             food_id: food.id,
             qty: parseFloat(quantity) || 1,
@@ -360,6 +365,12 @@ export default function AddBarcode() {
                       <Text style={styles.quantityUnit}>{food.servingUnit}</Text>
                     )}
                   </View>
+
+                  <MealTypeSelector
+                    value={mealType}
+                    onChange={setMealType}
+                    style={styles.mealTypeSelector}
+                  />
 
                   {/* Actions */}
                   <View style={styles.modalActions}>
@@ -648,6 +659,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 13,
     color: Colors.neutral.mutedGray,
+  },
+  mealTypeSelector: {
+    marginBottom: Theme.spacing.xl,
   },
   modalActions: {
     flexDirection: "row",

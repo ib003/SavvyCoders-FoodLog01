@@ -1,10 +1,12 @@
 import AllergenWarning from "@/components/AllergenWarning";
+import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { Colors } from "@/constants/Colors";
 import { Theme } from "@/constants/Theme";
 import { saveFood } from "@/src/_api/savedFoods";
 import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
 import { auth } from "@/src/lib/auth";
+import { MealTypeValue } from "@/src/lib/mealTypes";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -43,7 +45,7 @@ export default function AddSearch() {
   const [quantity, setQuantity] = useState("1");
   const [quantityModalVisible, setQuantityModalVisible] = useState(false);
   const [mealItems, setMealItems] = useState<MealItem[]>([]);
-  const [mealType, setMealType] = useState("breakfast");
+  const [mealType, setMealType] = useState<MealTypeValue>("breakfast");
   const [allergenAnalysis, setAllergenAnalysis] = useState<any>(null);
 
   const searchFoods = useCallback(async (query: string) => {
@@ -254,12 +256,13 @@ if (!token) {
         <View style={styles.mealSummary}>
           <View style={styles.summaryContent}>
             <Text style={styles.summaryText}>
-              {mealItems.length} item{mealItems.length > 1 ? "s" : ""} • {Math.round(getTotalCalories())} kcal
+              {mealType.charAt(0).toUpperCase() + mealType.slice(1)} • {mealItems.length} item{mealItems.length > 1 ? "s" : ""} • {Math.round(getTotalCalories())} kcal
             </Text>
             <TouchableOpacity onPress={handleSaveMeal} style={styles.saveButton}>
               <Text style={styles.saveButtonText}>Save Meal</Text>
             </TouchableOpacity>
           </View>
+          <MealTypeSelector value={mealType} onChange={setMealType} style={styles.mealTypeSelector} />
         </View>
       )}
 
@@ -394,7 +397,7 @@ if (!token) {
                 )}
 
                 <View style={styles.quantityContainer}>
-                  <Text style={styles.quantityLabel}></Text>
+                  <Text style={styles.quantityLabel}>Quantity</Text>
                   <TextInput
                     style={styles.quantityInput}
                     value={quantity}
@@ -499,6 +502,9 @@ const styles = StyleSheet.create({
     color: Colors.primary.green,
     fontSize: 14,
     fontWeight: "700",
+  },
+  mealTypeSelector: {
+    marginTop: Theme.spacing.md,
   },
   mealItemsPreview: {
     maxHeight: 60,
