@@ -46,3 +46,4 @@ server/.env
 
 # node
 node_modules/
+*.swp

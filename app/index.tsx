@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/Card";
 import { Divider } from "@/components/ui/Divider";
 import { GradientScreen } from "@/components/ui/GradientScreen";
+import { KeyboardDismissAccessory } from "@/components/ui/KeyboardDismissAccessory";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { SecondaryButton } from "@/components/ui/SecondaryButton";
 import { TextField } from "@/components/ui/TextField";
@@ -21,6 +22,22 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordShakeTrigger, setPasswordShakeTrigger] = useState(0);
+
+  const isCredentialError = (message: string) => {
+    const lowerMessage = message.toLowerCase();
+    return (
+      lowerMessage.includes("invalid email or password") ||
+      lowerMessage.includes("invalid credentials") ||
+      lowerMessage.includes("incorrect password") ||
+      lowerMessage.includes("wrong password") ||
+      lowerMessage.includes("incorrect email or password") ||
+      lowerMessage.includes("invalid password") ||
+      lowerMessage.includes("unauthorized") ||
+      lowerMessage.includes("bad credentials")
+    );
+  };
 
   // Animations
   const heroOpacity = useFadeIn(500, 100);
@@ -79,6 +96,7 @@ export default function Login() {
     }
 
     setLoading(true);
+    setPasswordError("");
     try {
       const result = await auth.login(email.trim(), password);
       if (result.token) {
@@ -87,8 +105,17 @@ export default function Login() {
         }, 100);
       }
     } catch (error: any) {
-      console.error("Login error:", error);
       const errorMessage = error.message || "Unable to sign in. Please check your credentials and try again.";
+      const isBadPasswordError = isCredentialError(errorMessage);
+
+      if (isBadPasswordError) {
+        setPasswordError("Password is incorrect");
+        setPasswordShakeTrigger((value) => value + 1);
+        return;
+      }
+
+      console.error("Login error:", error);
+
       Alert.alert(
         "Login Failed",
         errorMessage,
@@ -217,12 +244,19 @@ export default function Login() {
                 label="Password"
                 placeholder="Enter your password"
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (passwordError) {
+                    setPasswordError("");
+                  }
+                }}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoComplete="password"
                 icon="lock"
                 editable={!loading}
+                error={passwordError}
+                shakeTrigger={passwordShakeTrigger}
                 rightIcon={
                   <Pressable onPress={() => setShowPassword(!showPassword)}>
                     <FontAwesome
@@ -295,6 +329,7 @@ export default function Login() {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <KeyboardDismissAccessory />
     </GradientScreen>
   );
 }

@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,7 +7,161 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------- ENUMS ----------
+model User {
+  id                 String              @id @default(uuid())
+  email              String              @unique
+  passwordHash       String?
+  name               String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  dateOfBirth        DateTime?
+  gender             String?
+  timezone           String?             @default("America/Chicago")
+  heightCm           Float?
+  weightKg           Float?
+  activityLevel      ActivityLevel?
+  isVerified         Boolean             @default(false)
+  acceptedTermsAt    DateTime?
+  googleSub          String?             @unique
+  photoUrl           String?
+  meals              Meal[]
+  symptomLogs        SymptomLog[]
+  allergies          UserAllergy[]
+   savedFoods         SavedFood[]  
+  UserPreferences    UserPreferences?
+  verificationTokens VerificationToken[]
+}
+
+model Allergy {
+  id            Int            @id @default(autoincrement())
+  name          String         @unique
+  description   String?
+  foods         FoodAllergen[]
+  userAllergies UserAllergy[]
+}
+
+model UserAllergy {
+  id        Int     @id @default(autoincrement())
+  userId    String
+  allergyId Int
+  severity  Int?
+  note      String?
+  allergy   Allergy @relation(fields: [allergyId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, allergyId])
+}
+
+model Food {
+  id          Int            @id @default(autoincrement())
+  name        String
+  brand       String?
+  description String?
+  servingSize Float?
+  servingUnit String?
+  calories    Float?
+  protein     Float?
+  carbs       Float?
+  fat         Float?
+  fiber       Float?
+  sugar       Float?
+  sodium      Float?
+  barcode     String?        @unique
+  imageUrl    String?
+  source      FoodSource     @default(MANUAL)
+  externalId  String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  allergens   FoodAllergen[]
+  mealItems   MealItem[]
+  savedBy     SavedFood[] 
+
+  @@index([brand])
+  @@index([name])
+}
+
+model FoodAllergen {
+  id        Int     @id @default(autoincrement())
+  foodId    Int
+  allergyId Int
+  contains  Boolean @default(true)
+  level     String?
+  allergy   Allergy @relation(fields: [allergyId], references: [id], onDelete: Cascade)
+  food      Food    @relation(fields: [foodId], references: [id], onDelete: Cascade)
+
+  @@unique([foodId, allergyId])
+}
+
+model Meal {
+  id          Int          @id @default(autoincrement())
+  userId      String
+  dateTime    DateTime
+  mealType    MealType
+  note        String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items       MealItem[]
+  symptomLogs SymptomLog[] @relation("MealSymptoms")
+}
+
+model MealItem {
+  id       Int     @id @default(autoincrement())
+  mealId   Int
+  foodId   Int
+  quantity Float   @default(1)
+  unit     String?
+  notes    String?
+  calories Float?
+  protein  Float?
+  carbs    Float?
+  fat      Float?
+  fiber    Float?
+  sugar    Float?
+  sodium   Float?
+  food     Food    @relation(fields: [foodId], references: [id])
+  meal     Meal    @relation(fields: [mealId], references: [id], onDelete: Cascade)
+}
+
+model Symptom {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  description String?
+  logs        SymptomLog[]
+}
+
+model SymptomLog {
+  id            Int      @id @default(autoincrement())
+  userId        String
+  symptomId     Int
+  startedAt     DateTime @default(now())
+  severity      Int?
+  notes         String?
+  relatedMealId Int?
+  createdAt     DateTime @default(now())
+  relatedMeal   Meal?    @relation("MealSymptoms", fields: [relatedMealId], references: [id])
+  symptom       Symptom  @relation(fields: [symptomId], references: [id])
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  id        Int                   @id @default(autoincrement())
+  userId    String
+  token     String                @unique
+  type      VerificationTokenType
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime              @default(now())
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserPreferences {
+  id                 String   @id
+  userId             String   @unique
+  allergies          String[] @default([])
+  dietaryPreferences String[] @default([])
+  User               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
 
 enum ActivityLevel {
   SEDENTARY
@@ -20,9 +172,9 @@ enum ActivityLevel {
 }
 
 enum FoodSource {
-  MANUAL      // user typed it in
-  UPC_API     // fetched from barcode/UPC API
-  PHOTO_API   // estimated via photo API
+  MANUAL
+  UPC_API
+  PHOTO_API
 }
 
 enum MealType {
@@ -37,197 +189,16 @@ enum VerificationTokenType {
   EMAIL_VERIFY
   PASSWORD_RESET
 }
-
-// ---------- MODELS ----------
-
-// Auth + basic profile
-model User {
-  id             String    @id @default(uuid())
-  email          String    @unique
-  passwordHash   String?   // Optional for OAuth users
-  googleSub      String?   @unique // Google OAuth subject ID
-  appleSub       String?   @unique // Apple OAuth subject ID
-  name           String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  // profile / health info (optional for now)
-  dateOfBirth    DateTime?
-  gender         String?
-  timezone       String?   @default("America/Chicago")
-  heightCm       Float?
-  weightKg       Float?
-  activityLevel  ActivityLevel?
-
-  // privacy / terms
-  isVerified     Boolean   @default(false)
-  acceptedTermsAt DateTime?
-
-  // relations
-  allergies      UserAllergy[]
-  meals          Meal[]
-  symptomLogs    SymptomLog[]
-  verificationTokens VerificationToken[]
-}
-
-// Master list of allergies (e.g., Peanuts, Gluten, Lactose)
-model Allergy {
-  id            Int           @id @default(autoincrement())
-  name          String        @unique
-  description   String?
-
-  // relations
-  foods         FoodAllergen[]
-  userAllergies UserAllergy[]
-}
-
-// Join: which user has which allergy
-model UserAllergy {
-  id         Int      @id @default(autoincrement())
-
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId     String
-
-  allergy    Allergy  @relation(fields: [allergyId], references: [id], onDelete: Cascade)
-  allergyId  Int
-
-  severity   Int?     // 1–5, optional
-  note       String?
-
-  @@unique([userId, allergyId])
-}
-
-// Food catalog: manual entries + UPC + photo
-model Food {
-  id           Int         @id @default(autoincrement())
-  name         String
-  brand        String?
-  description  String?
-
-  // base nutrition per serving (optional but useful)
-  servingSize  Float?      // e.g., 100
-  servingUnit  String?     // "g", "ml", "piece"
-
-  calories     Float?
-  protein      Float?
-  carbs        Float?
-  fat          Float?
-  fiber        Float?
-  sugar        Float?
-  sodium       Float?
-
-  // barcode / external data
-  barcode      String?     @unique
-  imageUrl     String?
-  source       FoodSource  @default(MANUAL)
-  externalId   String?     // id from external API (e.g., OpenFoodFacts/USDA)
-
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-
-  // relations
-  mealItems    MealItem[]
-  allergens    FoodAllergen[]
-}
-
-// Join: which food contains which allergy
-model FoodAllergen {
-  id         Int      @id @default(autoincrement())
-
-  food       Food     @relation(fields: [foodId], references: [id], onDelete: Cascade)
-  foodId     Int
-
-  allergy    Allergy  @relation(fields: [allergyId], references: [id], onDelete: Cascade)
-  allergyId  Int
-
-  contains   Boolean  @default(true)  // false = "free from", true = "contains"
-  level      String?  // "MAY_CONTAIN", "TRACE", etc.
-
-  @@unique([foodId, allergyId])
-}
-
-// One meal event per user per time
-model Meal {
-  id         Int        @id @default(autoincrement())
-
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId     String
-
-  dateTime   DateTime   // when the meal happened
-  mealType   MealType
-  note       String?
-
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-
-  items      MealItem[]
-  symptomLogs SymptomLog[] @relation("MealSymptoms")
-}
-
-// Join between Meal and Food, with quantity and nutrition snapshot
-model MealItem {
-  id         Int      @id @default(autoincrement())
-
-  meal       Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
-  mealId     Int
-
-  food       Food     @relation(fields: [foodId], references: [id], onDelete: Restrict)
-  foodId     Int
-
-  quantity   Float    @default(1)      // e.g. 2.5 servings
-  unit       String?                 // if they choose "cup", "slice", etc.
-  notes      String?
-
-  // optional: snapshot nutrition at log time (denormalized)
-  calories   Float?
-  protein    Float?
-  carbs      Float?
-  fat        Float?
-  fiber      Float?
-  sugar      Float?
-  sodium     Float?
-}
-
-// Master list of possible symptoms
-model Symptom {
-  id          Int           @id @default(autoincrement())
-  name        String        @unique
-  description String?
-
-  logs        SymptomLog[]
-}
-
-// Logged symptom entry for a user
-model SymptomLog {
-  id            Int        @id @default(autoincrement())
-
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId        String
-
-  symptom       Symptom    @relation(fields: [symptomId], references: [id], onDelete: Restrict)
-  symptomId     Int
-
-  startedAt     DateTime   @default(now())
-  severity      Int?       // 1–10
-  notes         String?
-
-  // optional link to a meal (for correlation)
-  relatedMeal   Meal?      @relation("MealSymptoms", fields: [relatedMealId], references: [id])
-  relatedMealId Int?
-
-  createdAt     DateTime   @default(now())
-}
-
-// Tokens for email verification and password reset
-model VerificationToken {
-  id        Int                    @id @default(autoincrement())
-
-  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+model SavedFood {
+  id        Int      @id @default(autoincrement())
   userId    String
+  foodId    Int
+  createdAt DateTime @default(now())
 
-  token     String                 @unique
-  type      VerificationTokenType
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime               @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  food Food @relation(fields: [foodId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, foodId], name: "userId_foodId")
+  @@index([userId])
+  @@index([foodId])
 }
