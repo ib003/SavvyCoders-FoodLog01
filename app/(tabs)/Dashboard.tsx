@@ -1,5 +1,4 @@
 import AllergenWarning from "@/components/AllergenWarning";
-import NutritionInsights from "@/components/NutritionInsights";
 import { Card } from "@/components/ui/Card";
 import { Theme } from "@/constants/Theme";
 import { API_BASE } from "@/src/constants/api";
@@ -21,6 +20,9 @@ interface Meal {
   items: Array<{
     qty: number;
     kcal?: number | null;
+    protein_g?: number | null;
+    carbs_g?: number | null;
+    fat_g?: number | null;
     food: {
       id: string;
       name: string;
@@ -41,6 +43,12 @@ interface AlertItem {
     warnings: string[];
   };
 }
+interface DailyNutritionTotals {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -50,6 +58,12 @@ export default function DashboardScreen() {
   const [todayMeals, setTodayMeals] = useState<Meal[]>([]);
   const [todaySymptoms, setTodaySymptoms] = useState<Symptom[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [dailyTotals, setDailyTotals] = useState<DailyNutritionTotals>({
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+  });
   const isInitialMount = useRef(true);
   const previousPath = useRef(pathname);
 
@@ -147,9 +161,12 @@ export default function DashboardScreen() {
         m.occurredAt ??
         m.occurred_at ??
         new Date().toISOString(),
-      items: (m.items || []).map((it: any) => ({
+            items: (m.items || []).map((it: any) => ({
         qty: Number(it.qty ?? it.quantity ?? 1),
         kcal: Number(it.kcal ?? it.calories ?? it.food?.kcal ?? it.food?.calories) || null,
+        protein_g: Number(it.protein_g ?? it.protein ?? it.food?.protein_g ?? it.food?.protein ?? 0) || 0,
+        carbs_g: Number(it.carbs_g ?? it.carbs ?? it.food?.carbs_g ?? it.food?.carbs ?? 0) || 0,
+        fat_g: Number(it.fat_g ?? it.fat ?? it.food?.fat_g ?? it.food?.fat ?? 0) || 0,
         food: {
           id: String(it.food?.id ?? it.foodId ?? it.food_id ?? "unknown"),
           name: it.food?.name ?? it.name ?? "Unknown food",
@@ -160,6 +177,33 @@ export default function DashboardScreen() {
     }));
 
     setTodayMeals(normalized);
+        const totals = normalized.reduce<DailyNutritionTotals>((acc, meal) => {
+      meal.items.forEach((item) => {
+        const qty = Number(item.qty ?? 1);
+        const kcal = Number(item.kcal ?? item.food.kcal ?? 0);
+        const protein = Number(item.protein_g ?? 0);
+        const carbs = Number(item.carbs_g ?? 0);
+        const fat = Number(item.fat_g ?? 0);
+
+        acc.calories += Number.isFinite(kcal) ? kcal * qty : 0;
+        acc.protein += Number.isFinite(protein) ? protein * qty : 0;
+        acc.carbs += Number.isFinite(carbs) ? carbs * qty : 0;
+        acc.fat += Number.isFinite(fat) ? fat * qty : 0;
+      });
+      return acc;
+    }, {
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+    });
+
+    setDailyTotals({
+      calories: Math.round(totals.calories),
+      protein: Math.round(totals.protein * 10) / 10,
+      carbs: Math.round(totals.carbs * 10) / 10,
+      fat: Math.round(totals.fat * 10) / 10,
+    });
     await checkAlerts(normalized);
   } catch (error) {
     console.error("Failed to load meals:", error);
@@ -227,7 +271,39 @@ export default function DashboardScreen() {
                 throw new Error("Failed to delete meal");
               }
 
-              setTodayMeals((prev) => prev.filter((m) => m.id !== mealId));
+                           setTodayMeals((prev) => {
+                const updatedMeals = prev.filter((m) => m.id !== mealId);
+
+                const totals = updatedMeals.reduce<DailyNutritionTotals>((acc, meal) => {
+                  meal.items.forEach((item) => {
+                    const qty = Number(item.qty ?? 1);
+                    const kcal = Number(item.kcal ?? item.food.kcal ?? 0);
+                    const protein = Number(item.protein_g ?? 0);
+                    const carbs = Number(item.carbs_g ?? 0);
+                    const fat = Number(item.fat_g ?? 0);
+
+                    acc.calories += Number.isFinite(kcal) ? kcal * qty : 0;
+                    acc.protein += Number.isFinite(protein) ? protein * qty : 0;
+                    acc.carbs += Number.isFinite(carbs) ? carbs * qty : 0;
+                    acc.fat += Number.isFinite(fat) ? fat * qty : 0;
+                  });
+                  return acc;
+                }, {
+                  calories: 0,
+                  protein: 0,
+                  carbs: 0,
+                  fat: 0,
+                });
+
+                setDailyTotals({
+                  calories: Math.round(totals.calories),
+                  protein: Math.round(totals.protein * 10) / 10,
+                  carbs: Math.round(totals.carbs * 10) / 10,
+                  fat: Math.round(totals.fat * 10) / 10,
+                });
+
+                return updatedMeals;
+              });
               setAlerts((prev) => prev.filter((a) => a.meal.id !== mealId));
             } catch (error) {
               console.error("Failed to delete meal:", error);
@@ -266,11 +342,12 @@ export default function DashboardScreen() {
     });
   };
 
-  const getMealCalories = (meal: Meal) =>
-    meal.items.reduce((sum, item) => {
-      const kcal = Number(item.kcal ?? item.food.kcal);
-      return sum + (Number.isFinite(kcal) && kcal > 0 ? kcal : 0);
-    }, 0);
+ const getMealCalories = (meal: Meal) =>
+  meal.items.reduce((sum, item) => {
+    const qty = Number(item.qty ?? 1);
+    const kcal = Number(item.kcal ?? item.food.kcal ?? 0);
+    return sum + (Number.isFinite(kcal) && kcal > 0 ? kcal * qty : 0);
+  }, 0);
 
   if (loading) {
     return (
@@ -538,8 +615,34 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Nutrition Insights */}
-        <NutritionInsights />
+                {/* Nutrition Insights */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <FontAwesome name="bar-chart" size={20} color={Theme.colors.primary.main} style={styles.sectionIcon} />
+            <Text style={styles.sectionTitle}>Nutrition Insights</Text>
+          </View>
+
+          <Card style={styles.mealCard} padding="lg" variant="elevated">
+            <View style={styles.nutritionRow}>
+              <Text style={styles.nutritionLabel}>Calories</Text>
+              <Text style={styles.nutritionValue}>{dailyTotals.calories} kcal</Text>
+            </View>
+            <View style={[styles.nutritionRow, styles.mealItemBorder]}>
+              <Text style={styles.nutritionLabel}>Protein</Text>
+              <Text style={styles.nutritionValue}>{dailyTotals.protein} g</Text>
+            </View>
+            <View style={[styles.nutritionRow, styles.mealItemBorder]}>
+              <Text style={styles.nutritionLabel}>Carbs</Text>
+              <Text style={styles.nutritionValue}>{dailyTotals.carbs} g</Text>
+            </View>
+            <View style={[styles.nutritionRow, styles.mealItemBorder]}>
+              <Text style={styles.nutritionLabel}>Fat</Text>
+              <Text style={styles.nutritionValue}>{dailyTotals.fat} g</Text>
+            </View>
+          </Card>
+
+          
+        </View>
 
         {/* Summary Stats */}
         <View style={styles.statsContainer}>
@@ -763,6 +866,22 @@ const styles = StyleSheet.create({
     ...Theme.typography.caption,
     color: Theme.colors.text.secondary,
     fontWeight: '600',
+  },
+    nutritionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: Theme.spacing.md,
+  },
+  nutritionLabel: {
+    ...Theme.typography.body,
+    fontWeight: '600',
+    color: Theme.colors.text.primary,
+  },
+  nutritionValue: {
+    ...Theme.typography.bodySmall,
+    fontWeight: '700',
+    color: Theme.colors.primary.main,
   },
   // Symptoms
   symptomsContainer: {
