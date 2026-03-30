@@ -10,7 +10,9 @@ const prisma = new PrismaClient();
 const OpenAI = require("openai");
 const fetch = global.fetch || require("node-fetch");
 
+
 let openai = null;
+console.log("[ENV] FDC key present:", !!process.env.FDC_API_KEY);
 
 if (process.env.OPENAI_API_KEY) {
   openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -20,7 +22,6 @@ if (process.env.OPENAI_API_KEY) {
 }
 
 const FDC_API_KEY = process.env.FDC_API_KEY;
-
 // Initialize Google OAuth client
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -83,12 +84,39 @@ app.use(express.json({ limit: "60mb" }));
 
 function toFoodResponse(food) {
   if (!food) return food;
+
   const servingQty = food.servingQty ?? food.servingSize ?? null;
   const servingUnit = food.servingUnit ?? null;
   const kcal = food.kcal ?? food.calories ?? null;
-  return { ...food, servingQty, servingUnit, kcal };
-}
 
+  const protein = Number(food.protein ?? 0) || 0;
+  const carbs = Number(food.carbs ?? 0) || 0;
+  const fat = Number(food.fat ?? 0) || 0;
+  const fiber = Number(food.fiber ?? 0) || 0;
+  const sugar = Number(food.sugar ?? 0) || 0;
+  const sodium = Number(food.sodium ?? 0) || 0;
+
+  return {
+    ...food,
+    servingQty,
+    servingUnit,
+    kcal,
+    macros: {
+      protein,
+      carbs,
+      fat,
+      fiber,
+      sugar,
+      sodium,
+    },
+    protein,
+    carbs,
+    fat,
+    fiber,
+    sugar,
+    sodium,
+  };
+}
 // bearer auth middleware
 function auth(req, res, next) {
   const h = req.headers.authorization || "";
@@ -478,16 +506,27 @@ app.get("/foods", async (req, res) => {
       const candidates = list
         .map((f) => {
           const nutrients = Array.isArray(f.foodNutrients) ? f.foodNutrients : [];
-          const energy = nutrients.find((n) =>
-            String(n?.nutrientName || "").toLowerCase().includes("energy")
-          );
 
+const findNutrientValue = (names) => {
+  const found = nutrients.find((n) => {
+    const nutrientName = String(n?.nutrientName || "").toLowerCase();
+    return names.some((name) => nutrientName.includes(name));
+  });
+  return typeof found?.value === "number" ? found.value : 0;
+};
+
+const energy = nutrients.find((n) =>
+  String(n?.nutrientName || "").toLowerCase().includes("energy")
+);
           let calories = (energy && typeof energy.value === "number") ? energy.value : null;
           const unit = String(energy?.unitName || "").toUpperCase();
           if (typeof calories === "number" && unit === "KJ") calories = calories / 4.184; // kJ -> kcal
 
           const servingSize = (typeof f.servingSize === "number") ? f.servingSize : null;
           const servingUnit = f.servingSizeUnit ? String(f.servingSizeUnit) : null;
+          const protein = findNutrientValue(["protein"]);
+         const carbs = findNutrientValue(["carbohydrate"]);
+         const fat = findNutrientValue(["total lipid", "fat"]);
 
           return {
             //exactly like the model Food fields
@@ -497,6 +536,12 @@ app.get("/foods", async (req, res) => {
             servingSize: servingSize,
             servingUnit: servingUnit || null,
             calories: (typeof calories === "number") ? Math.round(calories) : null,
+            protein: Number(protein) || 0,
+           carbs: Number(carbs) || 0,
+           fat: Number(fat) || 0,
+           fiber: 0,
+           sugar: 0,
+           sodium: 0,
             barcode: null,
             imageUrl: null,
             source: "FDC_API",
@@ -516,8 +561,28 @@ app.get("/foods", async (req, res) => {
           let existing = await prisma.food.findFirst({
             where: { source: "FDC_API", externalId: c.externalId },
           });
-          if (!existing) existing = await prisma.food.create({ data: c });
-          saved.push(existing);
+          if (!existing) {
+  existing = await prisma.food.create({ data: c });
+} else {
+  existing = await prisma.food.update({
+    where: { id: existing.id },
+    data: {
+      calories: c.calories,
+      protein: c.protein,
+      carbs: c.carbs,
+      fat: c.fat,
+      fiber: c.fiber,
+      sugar: c.sugar,
+      sodium: c.sodium,
+      servingSize: c.servingSize,
+      servingUnit: c.servingUnit,
+      brand: c.brand,
+      description: c.description,
+      imageUrl: c.imageUrl,
+    },
+  });
+}
+saved.push(existing);
         }
         const result = saved.length ? saved.map(toFoodResponse) : candidates.map(toFoodResponse);
         return res.json(result);
@@ -532,10 +597,17 @@ app.get("/foods", async (req, res) => {
   }
 
   //Fallback: local DB search
-  const foods = await prisma.food.findMany({
-    where: { name: { contains: q, mode: "insensitive" } },
-    take: 25,
-  });
+ const foods = await prisma.food.findMany({
+  where: { name: { contains: q, mode: "insensitive" } },
+  include: {
+    allergens: {
+      include: {
+        allergy: true,
+      },
+    },
+  },
+  take: 25,
+});
   res.json(foods.map(toFoodResponse));
 });
 
@@ -567,12 +639,21 @@ app.get("/barcode/:upc", async (req, res) => {
 
     // Try to get calories per serving or per 100g
     const nutr = p.nutriments || {};
-    const kcal = (
-      nutr['energy-kcal_serving'] ?? nutr['energy-kcal_100g'] ?? nutr['energy_serving'] ?? nutr['energy_100g'] ?? null
+    const kcalRaw = (
+      nutr["energy-kcal_serving"] ??
+      nutr["energy-kcal_100g"] ??
+      nutr["energy_serving"] ??
+      nutr["energy_100g"] ??
+      null
     );
+    const protein = nutr["proteins_serving"] ?? nutr["proteins_100g"] ?? 0;
+    const carbs = nutr["carbohydrates_serving"] ?? nutr["carbohydrates_100g"] ?? 0;
+    const fat = nutr["fat_serving"] ?? nutr["fat_100g"] ?? 0;
 
     // Use serving_size as a human readable unit (e.g., "100 g" or "1 serving")
     const servingSizeRaw = p.serving_size || null;
+    const kcalNum = kcalRaw == null ? null : Number(kcalRaw);
+    const calories = Number.isFinite(kcalNum) && kcalNum > 0 ? Math.round(kcalNum) : null;
 
     // Create a new Food record from the external product
     const created = await prisma.food.create({
@@ -582,7 +663,7 @@ app.get("/barcode/:upc", async (req, res) => {
         description: p.generic_name || p.labels || null,
         servingSize: null,
         servingUnit: servingSizeRaw,
-        calories: kcal ? Number(kcal) : null,
+        calories: calories,
         barcode: upc,
         imageUrl: p.image_front_small_url || p.image_url || null,
         source: 'UPC_API',
@@ -641,7 +722,6 @@ app.post("/meals", auth, async (req, res) => {
     if (!occurred_at || !meal_type || !Array.isArray(items)) {
       return res.status(400).json({ error: "invalid body" });
     }
-
     //normalize meal strings
     const mealTypeMap = {
       breakfast: "BREAKFAST",
@@ -666,12 +746,21 @@ if (items.length) {
   const rows = [];
 
   for (const it of items) {
-    let foodId = it.food_id ?? it.foodId;
+        let foodId = it.food_id ?? it.foodId;
     if (foodId != null && !Number.isFinite(Number(foodId))) {
       foodId = null;
     }
     if (foodId != null) {
       foodId = Number(foodId);
+      const existingFood = await prisma.food.findUnique({
+        where: { id: foodId },
+        select: { id: true },
+      });
+
+      if (!existingFood) {
+        console.log("[MEALS] Invalid foodId, treating as external id:", foodId);
+        foodId = null;
+      }
     }
 
     //If client didn't send a real Food.id, resolve/create by externalId or name
@@ -682,10 +771,10 @@ if (items.length) {
       const kcal = it.kcal ?? it.calories ?? null;
 
       let food = null;
-
+      const source = it.source ?? "UPC_API";
       if (externalId) {
         food = await prisma.food.findFirst({
-          where: { externalId: String(externalId) },
+          where: { externalId: String(externalId), source },
         });
 
         if (!food) {
@@ -694,7 +783,14 @@ if (items.length) {
               name: name || `Food ${externalId}`,
               brand: brand,
               calories: kcal != null ? Number(kcal) : null,
-              source: "UPC_API",
+              protein: it.protein != null ? Number(it.protein) : 0,
+              carbs: it.carbs != null ? Number(it.carbs) : 0,
+              fat: it.fat != null ? Number(it.fat) : 0,
+              fiber: it.fiber != null ? Number(it.fiber) : 0,
+              sugar: it.sugar != null ? Number(it.sugar) : 0,
+              sodium: it.sodium != null ? Number(it.sodium) : 0,
+              ingredients: Array.isArray(it.ingredients) ? it.ingredients : [],
+              source,
               externalId: String(externalId),
             },
           });
@@ -705,6 +801,7 @@ if (items.length) {
           where: {
             name: { equals: String(name), mode: "insensitive" },
             ...(brand ? { brand: { equals: String(brand), mode: "insensitive" } } : {}),
+            source,
           },
         });
 
@@ -714,7 +811,14 @@ if (items.length) {
               name: String(name),
               brand: brand,
               calories: kcal != null ? Number(kcal) : null,
-              source: "UPC_API",
+              protein: it.protein != null ? Number(it.protein) : 0,
+              carbs: it.carbs != null ? Number(it.carbs) : 0,
+              fat: it.fat != null ? Number(it.fat) : 0,
+              fiber: it.fiber != null ? Number(it.fiber) : 0,
+              sugar: it.sugar != null ? Number(it.sugar) : 0,
+              sodium: it.sodium != null ? Number(it.sodium) : 0,
+              ingredients: Array.isArray(it.ingredients) ? it.ingredients : [],
+              source,
               externalId: null,
             },
           });
@@ -735,7 +839,7 @@ if (items.length) {
       quantity: it.qty ?? it.quantity ?? 1,
       unit: it.unit ?? null,
       notes: it.notes ?? null,
-      calories: it.calories ?? null,
+      calories: it.kcal ?? it.calories ?? null,
       protein: it.protein ?? null,
       carbs: it.carbs ?? null,
       fat: it.fat ?? null,
@@ -760,19 +864,63 @@ app.get("/meals", auth, async (req, res) => {
   const start = date ? new Date(`${date}T00:00:00.000Z`) : new Date("1970-01-01T00:00:00.000Z");
   const end   = date ? new Date(`${date}T23:59:59.999Z`) : new Date("2999-12-31T23:59:59.999Z");
   const meals = await prisma.meal.findMany({
-    where: { userId: req.userId, dateTime: { gte: start, lte: end } },
-    include: { items: { include: { food: true } } },
-    orderBy: { dateTime: "desc" }
+  where: { userId: req.userId, dateTime: { gte: start, lte: end } },
+  include: {
+    items: {
+      include: {
+        food: {
+          include: {
+            allergens: {
+              include: {
+                allergy: true,
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  orderBy: { dateTime: "desc" },
+});
+  const response = meals.map((meal) => {
+  const mappedItems = meal.items.map((item) => {
+    const qty = Number(item.quantity ?? 1) || 1;
+
+    const calories = Number(item.calories ?? item.food?.calories ?? item.food?.kcal ?? 0) || 0;
+    const protein = Number(item.protein ?? item.food?.protein ?? item.food?.macros?.protein ?? 0) || 0;
+    const carbs = Number(item.carbs ?? item.food?.carbs ?? item.food?.macros?.carbs ?? 0) || 0;
+    const fat = Number(item.fat ?? item.food?.fat ?? item.food?.macros?.fat ?? 0) || 0;
+
+    return {
+      ...item,
+      qty,
+      food: toFoodResponse(item.food),
+      totals: {
+        kcal: calories * qty,
+        protein: protein * qty,
+        carbs: carbs * qty,
+        fat: fat * qty,
+      },
+    };
   });
-  const response = meals.map((meal) => ({
+
+  const totals = mappedItems.reduce(
+    (acc, item) => ({
+      kcal: acc.kcal + item.totals.kcal,
+      protein: acc.protein + item.totals.protein,
+      carbs: acc.carbs + item.totals.carbs,
+      fat: acc.fat + item.totals.fat,
+    }),
+    { kcal: 0, protein: 0, carbs: 0, fat: 0 }
+  );
+
+  return {
     ...meal,
     occurredAt: meal.dateTime,
-    items: meal.items.map((item) => ({
-      ...item,
-      qty: item.quantity,
-      food: toFoodResponse(item.food),
-    })),
-  }));
+    items: mappedItems,
+    totals,
+  };
+});
   res.json(response);
 });
 
@@ -882,7 +1030,6 @@ app.post("/api/analyze-food", async (req, res) => {
   try {
     const aiRes = await openai.responses.create({
       model: "gpt-4.1-mini",
-      // ✅ Force STRICT JSON output using a schema
       text: {
         format: {
           type: "json_schema",
@@ -921,8 +1068,6 @@ app.post("/api/analyze-food", async (req, res) => {
 
     const aiText = getResponseText(aiRes);
 
-    // With json_schema strict, this should already be JSON text
-    // But still parse defensively.
     let parsed = null;
     try {
       parsed = JSON.parse(aiText);
@@ -1037,6 +1182,13 @@ async function resolveFoodId(input) {
           name: name || `Product ${barcode}`,
           brand: input?.brand ?? null,
           calories: input?.kcal ?? input?.calories ?? null,
+          protein: input?.protein ?? 0,
+          carbs: input?.carbs ?? 0,
+          fat: input?.fat ?? 0,
+          fiber: input?.fiber ?? 0,
+          sugar: input?.sugar ?? 0,
+          sodium: input?.sodium ?? 0,
+          ingredients: Array.isArray(input?.ingredients) ? input.ingredients : [],
           servingSize: input?.servingSize ?? input?.servingQty ?? null,
           servingUnit: input?.servingUnit ?? null,
           barcode: String(barcode),
@@ -1050,11 +1202,10 @@ async function resolveFoodId(input) {
   }
 
   if (externalId) {
+    const source = input?.source ?? "UPC_API";
+
     let food = await prisma.food.findFirst({
-      where: {
-        externalId: String(externalId),
-        ...(input?.source ? { source: input.source } : {}),
-      },
+      where: { externalId: String(externalId), source },
     });
 
     if (!food) {
@@ -1065,12 +1216,13 @@ async function resolveFoodId(input) {
           calories: input?.kcal ?? input?.calories ?? null,
           servingSize: input?.servingSize ?? input?.servingQty ?? null,
           servingUnit: input?.servingUnit ?? null,
-          imageUrl: input?.imageUrl ?? null,
-          source: input?.source ?? "UPC_API",
+          imageUrl: input?.imageUrl ?? input?.image_url ?? null,
+          source,
           externalId: String(externalId),
         },
       });
     }
+
     return food.id;
   }
 
@@ -1090,9 +1242,16 @@ async function resolveFoodId(input) {
           name: String(name),
           brand: input?.brand ?? null,
           calories: input?.kcal ?? input?.calories ?? null,
+          protein: input?.protein ?? 0,
+          carbs: input?.carbs ?? 0,
+          fat: input?.fat ?? 0,
+          fiber: input?.fiber ?? 0,
+          sugar: input?.sugar ?? 0,
+          sodium: input?.sodium ?? 0,
+          ingredients: Array.isArray(input?.ingredients) ? input.ingredients : [],
           servingSize: input?.servingSize ?? input?.servingQty ?? null,
           servingUnit: input?.servingUnit ?? null,
-          imageUrl: input?.imageUrl ?? null,
+          imageUrl: input?.imageUrl ?? input?.image_url ?? null,
           source: input?.source ?? "UPC_API",
           externalId: null,
         },

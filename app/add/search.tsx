@@ -37,7 +37,21 @@ interface MealItem {
   food: Food;
   qty: number;
 }
+const getFoodCalories = (food: any): number => {
+  const raw =
+    food?.kcal ??
+    food?.calories ??
+    food?.energy ??
+    food?.energyKcal ??
+    food?.macros?.calories ??
+    food?.macros?.kcal ??
+    food?.nutrients?.kcal ??
+    food?.nutritionalInfo?.kcal ??
+    0;
 
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : 0;
+};
 export default function AddSearch() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
@@ -72,7 +86,21 @@ export default function AddSearch() {
     }
 
     const data = await response.json();
-    setFoods(Array.isArray(data) ? data : []);
+
+console.log("[Foods] raw data:", JSON.stringify(data, null, 2));
+const normalizedFoods: Food[] = Array.isArray(data)
+  ? data.map((item: any) => ({
+      id: String(item.id),
+      name: item.name,
+      brand: item.brand,
+      servingUnit: item.servingUnit || item.serving_unit,
+      servingQty: item.servingQty || item.serving_qty || 1,
+      kcal: getFoodCalories(item),
+      macros: item.macros,
+    }))
+  : [];
+
+setFoods(normalizedFoods);
   } catch (error: any) {
     console.error("Search error:", error?.message || error);
     Alert.alert("Error", "Failed to search foods. Please check your connection.");
@@ -89,6 +117,7 @@ export default function AddSearch() {
   }, [searchQuery, searchFoods]);
 
   const handleFoodSelect = async (food: Food) => {
+    console.log("[Selected food]", JSON.stringify(food, null, 2));
     setSelectedFood(food);
     
     // Check for allergens
@@ -183,11 +212,11 @@ if (!response.ok) {
   };
 
   const getTotalCalories = () => {
-    return mealItems.reduce((sum, item) => {
-      const calories = item.food.kcal || 0;
-      return sum + (calories * item.qty);
-    }, 0);
-  };
+  return mealItems.reduce((sum, item) => {
+    const calories = getFoodCalories(item.food);
+    return sum + calories * item.qty;
+  }, 0);
+};
 
   return (
     <View style={styles.container}>
@@ -299,12 +328,10 @@ if (!response.ok) {
                   </Text>
                 )}
               </View>
-              {food.kcal && (
-                <View style={styles.calorieBadge}>
-                  <Text style={styles.calorieText}>{Math.round(food.kcal)}</Text>
-                  <Text style={styles.calorieUnit}>kcal</Text>
-                </View>
-              )}
+              <View style={styles.calorieBadge}>
+  <Text style={styles.calorieText}>{Math.round(getFoodCalories(food))}</Text>
+  <Text style={styles.calorieUnit}>kcal</Text>
+</View>
             </View>
             <FontAwesome name="plus-circle" size={24} color={Colors.primary.green} />
           </TouchableOpacity>
@@ -354,13 +381,12 @@ if (!response.ok) {
                   )}
                 </View>
 
-                {selectedFood.kcal && (
-                  <View style={styles.caloriePreview}>
-                    <Text style={styles.caloriePreviewText}>
-                      {Math.round((selectedFood.kcal || 0) * (parseFloat(quantity) || 1))} kcal
-                    </Text>
-                  </View>
-                )}
+                <View style={styles.caloriePreview}>
+  <Text style={styles.caloriePreviewText}>
+    {Math.round(getFoodCalories(selectedFood) * (parseFloat(quantity) || 1))} kcal
+  </Text>
+</View>
+                
 
                 <View style={styles.modalActions}>
                   <TouchableOpacity

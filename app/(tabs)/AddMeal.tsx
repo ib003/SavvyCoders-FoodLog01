@@ -11,15 +11,15 @@ export default function AddMealTab() {
   const router = useRouter();
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const token = await auth.getToken();
-      if (!token || typeof token !== 'string' || token.length < 20) {
-        console.log("[AddMeal] No valid token, redirecting to login");
-        router.replace("/");
-      }
-    };
-    checkAuth();
-  }, []);
+  const checkAuth = async () => {
+    const token = await auth.getToken();
+    if (!token || typeof token !== "string" || token.length < 20) {
+      console.log("[AddMeal] No valid token, redirecting to login");
+      router.replace("/");
+    }
+  };
+  checkAuth();
+}, [router]);
 
   const OptionCard = ({ 
     icon, 
