@@ -113,6 +113,41 @@ const getFoodKcal = (food: Food | null | undefined) => {
 const getFoodKcalForQty = (food: Food | null | undefined, qty: number) => {
   return getFoodKcal(food) * qty;
 };
+const getMealAnalysisTags = (items: MealItem[]) => {
+  return Array.from(
+    new Set(
+      items.flatMap((item) => {
+        const food = item.food;
+        return [
+          food.name,
+          ...(food.brand ? [food.brand] : []),
+          ...getFoodIngredients(food),
+          ...getFoodAllergens(food),
+        ]
+          .map((value) => String(value).toLowerCase().trim())
+          .filter(Boolean);
+      })
+    )
+  );
+};
+
+const extractAnalysisMessages = (analysis: any): string[] => {
+  if (!analysis) return [];
+
+  const directMessages = [
+    ...(Array.isArray(analysis?.allergenWarnings) ? analysis.allergenWarnings : []),
+    ...(Array.isArray(analysis?.dietaryConflicts) ? analysis.dietaryConflicts : []),
+    ...(Array.isArray(analysis?.warnings) ? analysis.warnings : []),
+    ...(Array.isArray(analysis?.conflicts) ? analysis.conflicts : []),
+    ...(Array.isArray(analysis?.messages) ? analysis.messages : []),
+  ];
+
+  const normalized = directMessages
+    .map((message) => String(message).trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(normalized));
+};
 
 export default function AddSearch() {
   const router = useRouter();
@@ -175,22 +210,6 @@ export default function AddSearch() {
   };
 
   const selectedQty = useMemo(() => getParsedQty(), [quantity]);
-  const selectedCalories = useMemo(
-    () => Math.round(getFoodKcalForQty(selectedFood, selectedQty)),
-    [selectedFood, selectedQty]
-  );
-  const selectedProtein = useMemo(
-    () => Math.round(getFoodProtein(selectedFood) * selectedQty),
-    [selectedFood, selectedQty]
-  );
-  const selectedCarbs = useMemo(
-    () => Math.round(getFoodCarbs(selectedFood) * selectedQty),
-    [selectedFood, selectedQty]
-  );
-  const selectedFat = useMemo(
-    () => Math.round(getFoodFat(selectedFood) * selectedQty),
-    [selectedFood, selectedQty]
-  );
 
   const handleSaveFood = async (food: Food) => {
     try {
@@ -245,31 +264,60 @@ export default function AddSearch() {
     setAllergenAnalysis(null);
   };
 
-
   const handleAddToMeal = () => {
     if (!selectedFood) return;
+
     const qty = getParsedQty();
+    const foodName = selectedFood.name;
+    const analysisMessages = extractAnalysisMessages(allergenAnalysis);
+
     setMealItems((prev) => [...prev, { food: selectedFood, qty }]);
     closeQuantityModal();
-    Alert.alert("Added!", `${selectedFood.name} added to your meal.`);
+
+    if (analysisMessages.length > 0) {
+      Alert.alert(
+        "Food Alert",
+        analysisMessages.join("\n"),
+        [
+          {
+            text: "OK",
+          },
+        ]
+      );
+      return;
+    }
+
+    Alert.alert("Added!", `${foodName} added to your meal.`);
   };
 
   const handleRemoveItem = (index: number) => {
     setMealItems((prev) => prev.filter((_, i) => i !== index));
   };
-const handleBackToAddMeal = () => {
-  router.replace("/(tabs)/AddMeal");
-};
-
-const mealTypeToApi = (t: MealTypeValue) => {
-  const map: Record<MealTypeValue, string> = {
-    breakfast: "BREAKFAST",
-    lunch: "LUNCH",
-    dinner: "DINNER",
-    snack: "SNACK",
+  const showMealSavedSuccess = () => {
+    Alert.alert("Success!", "Your meal has been saved.", [
+      {
+        text: "OK",
+        onPress: () => {
+          setMealItems([]);
+          router.push("/(tabs)/Dashboard");
+        },
+      },
+    ]);
   };
-  return map[t] ?? "BREAKFAST";
-};
+
+  const handleBackToAddMeal = () => {
+    router.replace("/(tabs)/AddMeal");
+  };
+
+  const mealTypeToApi = (t: MealTypeValue) => {
+    const map: Record<MealTypeValue, string> = {
+      breakfast: "BREAKFAST",
+      lunch: "LUNCH",
+      dinner: "DINNER",
+      snack: "SNACK",
+    };
+    return map[t] ?? "BREAKFAST";
+  };
  
   const handleSaveMeal = async () => {
     if (mealItems.length === 0) {
@@ -337,15 +385,30 @@ const mealTypeToApi = (t: MealTypeValue) => {
         throw new Error(text || "Failed to save meal");
       }
 
-      Alert.alert("Success!", "Your meal has been saved.", [
-        {
-          text: "OK",
-          onPress: () => {
-            setMealItems([]);
-            router.push("/(tabs)/Dashboard");
-          },
-        },
-      ]);
+      const mealAnalysis: any = await analyzeFood(getMealAnalysisTags(mealItems));
+      const warningMessages = extractAnalysisMessages(mealAnalysis);
+
+      if (
+        mealAnalysis?.hasAllergenWarning ||
+        mealAnalysis?.hasDietaryConflict ||
+        warningMessages.length > 0
+      ) {
+        Alert.alert(
+          "Meal Alert",
+          warningMessages.length > 0
+            ? warningMessages.join("\n")
+            : "This meal may contain ingredients that could trigger your saved allergies, intolerances, or dietary restrictions.",
+          [
+            {
+              text: "OK",
+              onPress: showMealSavedSuccess,
+            },
+          ]
+        );
+        return;
+      }
+
+      showMealSavedSuccess();
     } catch (error: any) {
       console.error("Save meal error:", error);
       Alert.alert("Error", error?.message || "Failed to save meal. Please try again.");
