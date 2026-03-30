@@ -23,6 +23,7 @@ model User {
   isVerified         Boolean             @default(false)
   acceptedTermsAt    DateTime?
   googleSub          String?             @unique
+  appleSub String? @unique
   photoUrl           String?
   meals              Meal[]
   symptomLogs        SymptomLog[]
@@ -66,6 +67,7 @@ model Food {
   fiber       Float?
   sugar       Float?
   sodium      Float?
+  ingredients String[] @default([])
   barcode     String?        @unique
   imageUrl    String?
   source      FoodSource     @default(MANUAL)
@@ -175,6 +177,7 @@ enum FoodSource {
   MANUAL
   UPC_API
   PHOTO_API
+  FDC_API
 }
 
 enum MealType {

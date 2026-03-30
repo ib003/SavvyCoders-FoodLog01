@@ -12,6 +12,7 @@ const fetch = global.fetch || require("node-fetch");
 
 
 let openai = null;
+console.log("[ENV] FDC key present:", !!process.env.FDC_API_KEY);
 
 if (process.env.OPENAI_API_KEY) {
   openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -596,10 +597,17 @@ saved.push(existing);
   }
 
   //Fallback: local DB search
-  const foods = await prisma.food.findMany({
-    where: { name: { contains: q, mode: "insensitive" } },
-    take: 25,
-  });
+ const foods = await prisma.food.findMany({
+  where: { name: { contains: q, mode: "insensitive" } },
+  include: {
+    allergens: {
+      include: {
+        allergy: true,
+      },
+    },
+  },
+  take: 25,
+});
   res.json(foods.map(toFoodResponse));
 });
 
@@ -632,8 +640,15 @@ app.get("/barcode/:upc", async (req, res) => {
     // Try to get calories per serving or per 100g
     const nutr = p.nutriments || {};
     const kcalRaw = (
-      nutr['energy-kcal_serving'] ?? nutr['energy-kcal_100g'] ?? nutr['energy_serving'] ?? nutr['energy_100g'] ?? null
+      nutr["energy-kcal_serving"] ??
+      nutr["energy-kcal_100g"] ??
+      nutr["energy_serving"] ??
+      nutr["energy_100g"] ??
+      null
     );
+    const protein = nutr["proteins_serving"] ?? nutr["proteins_100g"] ?? 0;
+    const carbs = nutr["carbohydrates_serving"] ?? nutr["carbohydrates_100g"] ?? 0;
+    const fat = nutr["fat_serving"] ?? nutr["fat_100g"] ?? 0;
 
     // Use serving_size as a human readable unit (e.g., "100 g" or "1 serving")
     const servingSizeRaw = p.serving_size || null;
@@ -737,7 +752,6 @@ if (items.length) {
     }
     if (foodId != null) {
       foodId = Number(foodId);
-
       const existingFood = await prisma.food.findUnique({
         where: { id: foodId },
         select: { id: true },
@@ -759,7 +773,6 @@ if (items.length) {
       let food = null;
       const source = it.source ?? "UPC_API";
       if (externalId) {
-       
         food = await prisma.food.findFirst({
           where: { externalId: String(externalId), source },
         });
@@ -770,6 +783,13 @@ if (items.length) {
               name: name || `Food ${externalId}`,
               brand: brand,
               calories: kcal != null ? Number(kcal) : null,
+              protein: it.protein != null ? Number(it.protein) : 0,
+              carbs: it.carbs != null ? Number(it.carbs) : 0,
+              fat: it.fat != null ? Number(it.fat) : 0,
+              fiber: it.fiber != null ? Number(it.fiber) : 0,
+              sugar: it.sugar != null ? Number(it.sugar) : 0,
+              sodium: it.sodium != null ? Number(it.sodium) : 0,
+              ingredients: Array.isArray(it.ingredients) ? it.ingredients : [],
               source,
               externalId: String(externalId),
             },
@@ -791,6 +811,13 @@ if (items.length) {
               name: String(name),
               brand: brand,
               calories: kcal != null ? Number(kcal) : null,
+              protein: it.protein != null ? Number(it.protein) : 0,
+              carbs: it.carbs != null ? Number(it.carbs) : 0,
+              fat: it.fat != null ? Number(it.fat) : 0,
+              fiber: it.fiber != null ? Number(it.fiber) : 0,
+              sugar: it.sugar != null ? Number(it.sugar) : 0,
+              sodium: it.sodium != null ? Number(it.sodium) : 0,
+              ingredients: Array.isArray(it.ingredients) ? it.ingredients : [],
               source,
               externalId: null,
             },
@@ -837,20 +864,63 @@ app.get("/meals", auth, async (req, res) => {
   const start = date ? new Date(`${date}T00:00:00.000Z`) : new Date("1970-01-01T00:00:00.000Z");
   const end   = date ? new Date(`${date}T23:59:59.999Z`) : new Date("2999-12-31T23:59:59.999Z");
   const meals = await prisma.meal.findMany({
-    where: { userId: req.userId, dateTime: { gte: start, lte: end } },
-    include: { items: { include: { food: true } } },
-    orderBy: { dateTime: "desc" }
+  where: { userId: req.userId, dateTime: { gte: start, lte: end } },
+  include: {
+    items: {
+      include: {
+        food: {
+          include: {
+            allergens: {
+              include: {
+                allergy: true,
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  orderBy: { dateTime: "desc" },
+});
+  const response = meals.map((meal) => {
+  const mappedItems = meal.items.map((item) => {
+    const qty = Number(item.quantity ?? 1) || 1;
+
+    const calories = Number(item.calories ?? item.food?.calories ?? item.food?.kcal ?? 0) || 0;
+    const protein = Number(item.protein ?? item.food?.protein ?? item.food?.macros?.protein ?? 0) || 0;
+    const carbs = Number(item.carbs ?? item.food?.carbs ?? item.food?.macros?.carbs ?? 0) || 0;
+    const fat = Number(item.fat ?? item.food?.fat ?? item.food?.macros?.fat ?? 0) || 0;
+
+    return {
+      ...item,
+      qty,
+      food: toFoodResponse(item.food),
+      totals: {
+        kcal: calories * qty,
+        protein: protein * qty,
+        carbs: carbs * qty,
+        fat: fat * qty,
+      },
+    };
   });
-  const response = meals.map((meal) => ({
+
+  const totals = mappedItems.reduce(
+    (acc, item) => ({
+      kcal: acc.kcal + item.totals.kcal,
+      protein: acc.protein + item.totals.protein,
+      carbs: acc.carbs + item.totals.carbs,
+      fat: acc.fat + item.totals.fat,
+    }),
+    { kcal: 0, protein: 0, carbs: 0, fat: 0 }
+  );
+
+  return {
     ...meal,
     occurredAt: meal.dateTime,
-    items: meal.items.map((item) => ({
-      ...item,
-      qty: item.quantity,
-       kcal: (item.calories ?? null),
-      food: toFoodResponse(item.food),
-    })),
-  }));
+    items: mappedItems,
+    totals,
+  };
+});
   res.json(response);
 });
 
@@ -1112,6 +1182,13 @@ async function resolveFoodId(input) {
           name: name || `Product ${barcode}`,
           brand: input?.brand ?? null,
           calories: input?.kcal ?? input?.calories ?? null,
+          protein: input?.protein ?? 0,
+          carbs: input?.carbs ?? 0,
+          fat: input?.fat ?? 0,
+          fiber: input?.fiber ?? 0,
+          sugar: input?.sugar ?? 0,
+          sodium: input?.sodium ?? 0,
+          ingredients: Array.isArray(input?.ingredients) ? input.ingredients : [],
           servingSize: input?.servingSize ?? input?.servingQty ?? null,
           servingUnit: input?.servingUnit ?? null,
           barcode: String(barcode),
@@ -1165,6 +1242,13 @@ async function resolveFoodId(input) {
           name: String(name),
           brand: input?.brand ?? null,
           calories: input?.kcal ?? input?.calories ?? null,
+          protein: input?.protein ?? 0,
+          carbs: input?.carbs ?? 0,
+          fat: input?.fat ?? 0,
+          fiber: input?.fiber ?? 0,
+          sugar: input?.sugar ?? 0,
+          sodium: input?.sodium ?? 0,
+          ingredients: Array.isArray(input?.ingredients) ? input.ingredients : [],
           servingSize: input?.servingSize ?? input?.servingQty ?? null,
           servingUnit: input?.servingUnit ?? null,
           imageUrl: input?.imageUrl ?? input?.image_url ?? null,
