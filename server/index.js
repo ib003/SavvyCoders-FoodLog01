@@ -8,7 +8,7 @@ const jwksClient = require("jwks-rsa");
 const { PrismaClient, Prisma } = require("@prisma/client");
 const prisma = new PrismaClient();
 const OpenAI = require("openai");
-const fetch = global.fetch || require("node-fetch");
+const fetch = global.fetch;
 
 
 let openai = null;
