@@ -546,8 +546,6 @@ const energy = nutrients.find((n) =>
             imageUrl: null,
             source: "FDC_API",
             externalId: f.fdcId ? String(f.fdcId) : null,
-            servingQty: servingSize,
-            kcal: (typeof calories === "number") ? Math.round(calories) : null,
           };
         })
         .filter((x) => x.name);
