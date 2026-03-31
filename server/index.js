@@ -5,11 +5,23 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const { OAuth2Client } = require("google-auth-library");
 const jwksClient = require("jwks-rsa");
-const { PrismaClient } = require("@prisma/client");
+const { PrismaClient, Prisma } = require("@prisma/client");
 const prisma = new PrismaClient();
 const OpenAI = require("openai");
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const fetch = global.fetch;
 
+
+let openai = null;
+console.log("[ENV] FDC key present:", !!process.env.FDC_API_KEY);
+
+if (process.env.OPENAI_API_KEY) {
+  openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  console.log("OpenAI initialized.");
+} else {
+  console.warn("OPENAI_API_KEY not set. AI features disabled.");
+}
+
+const FDC_API_KEY = process.env.FDC_API_KEY;
 // Initialize Google OAuth client
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -54,25 +66,78 @@ async function verifyAppleToken(identityToken) {
 }
 
 const app = express();
-app.use(cors());
-app.use(express.json({ limit: "20mb" }));
+app.set("trust proxy", 1);
 
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
+
+// SAFE preflight handler (doesn't crash like app.options("*"...))
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+app.use(express.json({ limit: "60mb" }));
+
+function toFoodResponse(food) {
+  if (!food) return food;
+
+  const servingQty = food.servingQty ?? food.servingSize ?? null;
+  const servingUnit = food.servingUnit ?? null;
+  const kcal = food.kcal ?? food.calories ?? null;
+
+  const protein = Number(food.protein ?? 0) || 0;
+  const carbs = Number(food.carbs ?? 0) || 0;
+  const fat = Number(food.fat ?? 0) || 0;
+  const fiber = Number(food.fiber ?? 0) || 0;
+  const sugar = Number(food.sugar ?? 0) || 0;
+  const sodium = Number(food.sodium ?? 0) || 0;
+
+  return {
+    ...food,
+    servingQty,
+    servingUnit,
+    kcal,
+    macros: {
+      protein,
+      carbs,
+      fat,
+      fiber,
+      sugar,
+      sodium,
+    },
+    protein,
+    carbs,
+    fat,
+    fiber,
+    sugar,
+    sodium,
+  };
+}
 // bearer auth middleware
 function auth(req, res, next) {
   const h = req.headers.authorization || "";
-  const t = h.startsWith("Bearer ") ? h.slice(7) : "";
-  if (!t) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
+  const t = h.startsWith("Bearer ") ? h.slice(7).trim() : "";
+
+  console.log("[AUTH] header present:", !!h);
+  console.log("[AUTH] tokenLen:", t.length);
+  console.log("[AUTH] tokenPreview:", t ? `${t.slice(0, 20)}...${t.slice(-10)}` : "(none)");
+  console.log("[AUTH] hasDots:", t.includes("."));
+
+  if (!t) return res.status(401).json({ error: "unauthorized" });
+
   try {
     const decoded = jwt.verify(t, process.env.JWT_SECRET || "fallback-secret-key");
-    req.userId = decoded.userId; // Use userId consistently
-    next();
+    req.userId = decoded.userId;
+    return next();
   } catch (error) {
+    console.log("[AUTH] verify failed:", error.message);
     return res.status(401).json({ error: "unauthorized" });
   }
 }
-
 // --- Auth ---
 app.post("/auth/register", async (req, res) => {
   try {
@@ -161,6 +226,11 @@ app.post("/auth/login", async (req, res) => {
     if (!user) {
       console.log("[LOGIN] User not found for email:", normalizedEmail);
       return res.status(401).json({ error: "Invalid email or password" });
+    }
+    
+    if (!user.passwordHash) {
+      console.log("[LOGIN] User has no passwordHash (OAuth account):", user.email);
+      return res.status(401).json({ error: "Please sign in with Google/Apple for this account" });
     }
     
     console.log("[LOGIN] User found:", { id: user.id, email: user.email });
@@ -408,12 +478,137 @@ app.post("/auth/apple", async (req, res) => {
 
 // --- Foods & barcode ---
 app.get("/foods", async (req, res) => {
-  const q = req.query.q || "";
-  const foods = await prisma.food.findMany({
-    where: { name: { contains: q, mode: "insensitive" } },
-    take: 25,
+  const q = String(req.query.q || "").trim();
+  if (!q) return res.json([]);
+
+  //If a real FDC_API_KEY is set in .env, search USDA FoodData Central (real nutrition DB)
+  if (FDC_API_KEY) {
+    try {
+      const url =
+        "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" +
+        encodeURIComponent(FDC_API_KEY);
+
+      const fdcResp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q, pageSize: 25, pageNumber: 1 }),
+      });
+
+      if (!fdcResp.ok) {
+        const txt = await fdcResp.text();
+        console.error("[/foods] FDC error:", fdcResp.status, txt.slice(0, 300));
+        return res.status(502).json([]);
+      }
+
+      const payload = await fdcResp.json();
+      const list = Array.isArray(payload.foods) ? payload.foods : [];
+
+      const candidates = list
+        .map((f) => {
+          const nutrients = Array.isArray(f.foodNutrients) ? f.foodNutrients : [];
+
+const findNutrientValue = (names) => {
+  const found = nutrients.find((n) => {
+    const nutrientName = String(n?.nutrientName || "").toLowerCase();
+    return names.some((name) => nutrientName.includes(name));
   });
-  res.json(foods);
+  return typeof found?.value === "number" ? found.value : 0;
+};
+
+const energy = nutrients.find((n) =>
+  String(n?.nutrientName || "").toLowerCase().includes("energy")
+);
+          let calories = (energy && typeof energy.value === "number") ? energy.value : null;
+          const unit = String(energy?.unitName || "").toUpperCase();
+          if (typeof calories === "number" && unit === "KJ") calories = calories / 4.184; // kJ -> kcal
+
+          const servingSize = (typeof f.servingSize === "number") ? f.servingSize : null;
+          const servingUnit = f.servingSizeUnit ? String(f.servingSizeUnit) : null;
+          const protein = findNutrientValue(["protein"]);
+         const carbs = findNutrientValue(["carbohydrate"]);
+         const fat = findNutrientValue(["total lipid", "fat"]);
+
+          return {
+            //exactly like the model Food fields
+            name: String(f.description || ""),
+            brand: f.brandOwner || f.brandName || null,
+            description: null,
+            servingSize: servingSize,
+            servingUnit: servingUnit || null,
+            calories: (typeof calories === "number") ? Math.round(calories) : null,
+            protein: Number(protein) || 0,
+           carbs: Number(carbs) || 0,
+           fat: Number(fat) || 0,
+           fiber: 0,
+           sugar: 0,
+           sodium: 0,
+            barcode: null,
+            imageUrl: null,
+            source: "FDC_API",
+            externalId: f.fdcId ? String(f.fdcId) : null,
+            servingQty: servingSize,
+            kcal: (typeof calories === "number") ? Math.round(calories) : null,
+          };
+        })
+        .filter((x) => x.name);
+
+      //Cache to DB so later /meals can reference a real Food id
+      //If DB is down, we still return the external results
+      try {
+        const saved = [];
+        for (const c of candidates) {
+          if (!c.externalId) continue;
+          let existing = await prisma.food.findFirst({
+            where: { source: "FDC_API", externalId: c.externalId },
+          });
+          if (!existing) {
+  existing = await prisma.food.create({ data: c });
+} else {
+  existing = await prisma.food.update({
+    where: { id: existing.id },
+    data: {
+      calories: c.calories,
+      protein: c.protein,
+      carbs: c.carbs,
+      fat: c.fat,
+      fiber: c.fiber,
+      sugar: c.sugar,
+      sodium: c.sodium,
+      servingSize: c.servingSize,
+      servingUnit: c.servingUnit,
+      brand: c.brand,
+      description: c.description,
+      imageUrl: c.imageUrl,
+    },
+  });
+}
+saved.push(existing);
+        }
+        const result = saved.length ? saved.map(toFoodResponse) : candidates.map(toFoodResponse);
+        return res.json(result);
+      } catch (dbErr) {
+        console.error("[/foods] DB cache failed, returning external results:", dbErr?.message || dbErr);
+        return res.json(candidates.map(toFoodResponse));
+      }
+    } catch (err) {
+      console.error("[/foods] External search failed:", err);
+      return res.status(502).json([]);
+    }
+  }
+
+  //Fallback: local DB search
+ const foods = await prisma.food.findMany({
+  where: { name: { contains: q, mode: "insensitive" } },
+  include: {
+    allergens: {
+      include: {
+        allergy: true,
+      },
+    },
+  },
+  take: 25,
+});
+  res.json(foods.map(toFoodResponse));
 });
 
 app.get("/barcode/:upc", async (req, res) => {
@@ -423,7 +618,7 @@ app.get("/barcode/:upc", async (req, res) => {
     // Try to find an existing Food by its barcode
     let food = await prisma.food.findUnique({ where: { barcode: upc } });
     if (food) {
-      return res.json(food);
+      return res.json(toFoodResponse(food));
     }
 
     // If not found locally, try OpenFoodFacts (public UPC/product database)
@@ -444,12 +639,21 @@ app.get("/barcode/:upc", async (req, res) => {
 
     // Try to get calories per serving or per 100g
     const nutr = p.nutriments || {};
-    const kcal = (
-      nutr['energy-kcal_serving'] ?? nutr['energy-kcal_100g'] ?? nutr['energy_serving'] ?? nutr['energy_100g'] ?? null
+    const kcalRaw = (
+      nutr["energy-kcal_serving"] ??
+      nutr["energy-kcal_100g"] ??
+      nutr["energy_serving"] ??
+      nutr["energy_100g"] ??
+      null
     );
+    const protein = nutr["proteins_serving"] ?? nutr["proteins_100g"] ?? 0;
+    const carbs = nutr["carbohydrates_serving"] ?? nutr["carbohydrates_100g"] ?? 0;
+    const fat = nutr["fat_serving"] ?? nutr["fat_100g"] ?? 0;
 
     // Use serving_size as a human readable unit (e.g., "100 g" or "1 serving")
     const servingSizeRaw = p.serving_size || null;
+    const kcalNum = kcalRaw == null ? null : Number(kcalRaw);
+    const calories = Number.isFinite(kcalNum) && kcalNum > 0 ? Math.round(kcalNum) : null;
 
     // Create a new Food record from the external product
     const created = await prisma.food.create({
@@ -459,7 +663,7 @@ app.get("/barcode/:upc", async (req, res) => {
         description: p.generic_name || p.labels || null,
         servingSize: null,
         servingUnit: servingSizeRaw,
-        calories: kcal ? Number(kcal) : null,
+        calories: calories,
         barcode: upc,
         imageUrl: p.image_front_small_url || p.image_url || null,
         source: 'UPC_API',
@@ -467,7 +671,7 @@ app.get("/barcode/:upc", async (req, res) => {
       },
     });
 
-    return res.json(created);
+    return res.json(toFoodResponse(created));
   } catch (err) {
     console.error('Barcode lookup error:', err);
     return res.status(500).json({ error: 'Failed to lookup barcode' });
@@ -513,227 +717,384 @@ app.get("/auth/me", auth, async (req, res) => {
 });
 
 app.post("/meals", auth, async (req, res) => {
-  const { occurred_at, meal_type, items } = req.body;
-  if (!occurred_at || !meal_type || !Array.isArray(items)) {
-    return res.status(400).json({ error: "invalid body" });
-  }
-  const meal = await prisma.meal.create({
-    data: { userId: req.userId, occurredAt: new Date(occurred_at), mealType: meal_type },
-  });
-  if (items.length) {
-    await prisma.mealItem.createMany({
-      data: items.map(it => ({
-        mealId: meal.id, foodId: it.food_id, qty: it.qty, overrides: it.overrides || {}
-      }))
+  try {
+    const { occurred_at, meal_type, note, items } = req.body;
+    if (!occurred_at || !meal_type || !Array.isArray(items)) {
+      return res.status(400).json({ error: "invalid body" });
+    }
+    //normalize meal strings
+    const mealTypeMap = {
+      breakfast: "BREAKFAST",
+      lunch: "LUNCH",
+      dinner: "DINNER",
+      snack: "SNACK",
+      snacks: "SNACK",
+    };
+    const mealTypeKey = String(meal_type).trim().toLowerCase();
+    const normalizedMealType = mealTypeMap[mealTypeKey] || String(meal_type).trim();
+
+    const meal = await prisma.meal.create({
+      data: {
+        userId: req.userId,
+        dateTime: new Date(occurred_at),
+        mealType: normalizedMealType,
+        note: note || null
+      },
+    });
+
+if (items.length) {
+  const rows = [];
+
+  for (const it of items) {
+        let foodId = it.food_id ?? it.foodId;
+    if (foodId != null && !Number.isFinite(Number(foodId))) {
+      foodId = null;
+    }
+    if (foodId != null) {
+      foodId = Number(foodId);
+      const existingFood = await prisma.food.findUnique({
+        where: { id: foodId },
+        select: { id: true },
+      });
+
+      if (!existingFood) {
+        console.log("[MEALS] Invalid foodId, treating as external id:", foodId);
+        foodId = null;
+      }
+    }
+
+    //If client didn't send a real Food.id, resolve/create by externalId or name
+    if (foodId == null) {
+      const externalId = it.externalId ?? it.external_id ?? null;
+      const name = it.name ?? null;
+      const brand = it.brand ?? null;
+      const kcal = it.kcal ?? it.calories ?? null;
+
+      let food = null;
+      const source = it.source ?? "UPC_API";
+      if (externalId) {
+        food = await prisma.food.findFirst({
+          where: { externalId: String(externalId), source },
+        });
+
+        if (!food) {
+          food = await prisma.food.create({
+            data: {
+              name: name || `Food ${externalId}`,
+              brand: brand,
+              calories: kcal != null ? Number(kcal) : null,
+              protein: it.protein != null ? Number(it.protein) : 0,
+              carbs: it.carbs != null ? Number(it.carbs) : 0,
+              fat: it.fat != null ? Number(it.fat) : 0,
+              fiber: it.fiber != null ? Number(it.fiber) : 0,
+              sugar: it.sugar != null ? Number(it.sugar) : 0,
+              sodium: it.sodium != null ? Number(it.sodium) : 0,
+              ingredients: Array.isArray(it.ingredients) ? it.ingredients : [],
+              source,
+              externalId: String(externalId),
+            },
+          });
+        }
+      } else if (name) {
+        //fallback: match by name/brand, else create
+        food = await prisma.food.findFirst({
+          where: {
+            name: { equals: String(name), mode: "insensitive" },
+            ...(brand ? { brand: { equals: String(brand), mode: "insensitive" } } : {}),
+            source,
+          },
+        });
+
+        if (!food) {
+          food = await prisma.food.create({
+            data: {
+              name: String(name),
+              brand: brand,
+              calories: kcal != null ? Number(kcal) : null,
+              protein: it.protein != null ? Number(it.protein) : 0,
+              carbs: it.carbs != null ? Number(it.carbs) : 0,
+              fat: it.fat != null ? Number(it.fat) : 0,
+              fiber: it.fiber != null ? Number(it.fiber) : 0,
+              sugar: it.sugar != null ? Number(it.sugar) : 0,
+              sodium: it.sodium != null ? Number(it.sodium) : 0,
+              ingredients: Array.isArray(it.ingredients) ? it.ingredients : [],
+              source,
+              externalId: null,
+            },
+          });
+        }
+      } else {
+        return res.status(400).json({
+          error: "invalid body",
+          message: "Missing food_id and no externalId/name provided",
+        });
+      }
+
+      foodId = food.id;
+    }
+
+    rows.push({
+      mealId: meal.id,
+      foodId: foodId,
+      quantity: it.qty ?? it.quantity ?? 1,
+      unit: it.unit ?? null,
+      notes: it.notes ?? null,
+      calories: it.kcal ?? it.calories ?? null,
+      protein: it.protein ?? null,
+      carbs: it.carbs ?? null,
+      fat: it.fat ?? null,
+      fiber: it.fiber ?? null,
+      sugar: it.sugar ?? null,
+      sodium: it.sodium ?? null,
     });
   }
-  res.json(meal);
+
+  await prisma.mealItem.createMany({ data: rows });
+}
+
+    return res.json(meal);
+  } catch (e) {
+    console.error("[MEALS] Save failed:", e);
+    return res.status(500).json({ error: "failed_to_save_meal", message: e.message });
+  }
 });
 
 app.get("/meals", auth, async (req, res) => {
   const { date } = req.query; // YYYY-MM-DD
-  const start = date ? new Date(`${date}T00:00:00Z`) : new Date("1970-01-01T00:00:00Z");
-  const end   = date ? new Date(`${date}T23:59:59Z`) : new Date("2999-12-31T23:59:59Z");
+  const start = date ? new Date(`${date}T00:00:00.000Z`) : new Date("1970-01-01T00:00:00.000Z");
+  const end   = date ? new Date(`${date}T23:59:59.999Z`) : new Date("2999-12-31T23:59:59.999Z");
   const meals = await prisma.meal.findMany({
-    where: { userId: req.userId, occurredAt: { gte: start, lte: end } },
-    include: { items: { include: { food: true } } },
-    orderBy: { occurredAt: "desc" }
+  where: { userId: req.userId, dateTime: { gte: start, lte: end } },
+  include: {
+    items: {
+      include: {
+        food: {
+          include: {
+            allergens: {
+              include: {
+                allergy: true,
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  orderBy: { dateTime: "desc" },
+});
+  const response = meals.map((meal) => {
+  const mappedItems = meal.items.map((item) => {
+    const qty = Number(item.quantity ?? 1) || 1;
+
+    const calories = Number(item.calories ?? item.food?.calories ?? item.food?.kcal ?? 0) || 0;
+    const protein = Number(item.protein ?? item.food?.protein ?? item.food?.macros?.protein ?? 0) || 0;
+    const carbs = Number(item.carbs ?? item.food?.carbs ?? item.food?.macros?.carbs ?? 0) || 0;
+    const fat = Number(item.fat ?? item.food?.fat ?? item.food?.macros?.fat ?? 0) || 0;
+
+    return {
+      ...item,
+      qty,
+      food: toFoodResponse(item.food),
+      totals: {
+        kcal: calories * qty,
+        protein: protein * qty,
+        carbs: carbs * qty,
+        fat: fat * qty,
+      },
+    };
   });
-  res.json(meals);
+
+  const totals = mappedItems.reduce(
+    (acc, item) => ({
+      kcal: acc.kcal + item.totals.kcal,
+      protein: acc.protein + item.totals.protein,
+      carbs: acc.carbs + item.totals.carbs,
+      fat: acc.fat + item.totals.fat,
+    }),
+    { kcal: 0, protein: 0, carbs: 0, fat: 0 }
+  );
+
+  return {
+    ...meal,
+    occurredAt: meal.dateTime,
+    items: mappedItems,
+    totals,
+  };
+});
+  res.json(response);
+});
+
+app.delete("/meals/:id", auth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: "invalid meal id" });
+    }
+
+    const existing = await prisma.meal.findFirst({
+      where: { id: id, userId: req.userId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: "meal not found" });
+    }
+
+    await prisma.meal.delete({ where: { id: id } });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error("[MEALS] Delete failed:", e);
+    return res.status(500).json({ error: "failed_to_delete_meal", message: e.message });
+  }
 });
 
 // --- AI Food Analysis ---
 // --- AI Food Analysis ---
-app.post("/api/analyze-food", async (req, res) =>
-{
-const image = req.body.image
+app.post("/api/analyze-food", async (req, res) => {
+  const image = req.body.image;
 
-if (!image)
-{
-return res.status(400).json({ error: "missing image" })
-}
-
-let dataUrl = image
-if (!dataUrl.startsWith("data:"))
-{
-dataUrl = "data:image/jpeg;base64," + dataUrl
-}
-
-//this object will hold the final ai estimate for the food in the picture
-let result =
-{
-name: "unknown food",
-calories: 0,
-protein: 0,
-carbs: 0,
-fat: 0,
-ingredients: []
-}
-
-try
-{
-//this is the prompt i give ChatGPT to get the estimate  
-const promptText = "you see a photo of food. estimate the dish name, total calories, grams of protein, grams of carbs, grams of fat, and a short list of ingredients. respond only with json using keys name, calories, protein, carbs, fat, ingredients where ingredients is an array of strings"
-
-const aiRes = await openai.responses.create({
-model: "gpt-4.1-mini",
-input: [
-{
-role: "user",
-content: [
-{ type: "input_text", text: promptText },
-{ type: "input_image", image_url: dataUrl }
-]
-}
-]
-})
-
-let aiText = null
-
-//this if statement checks if the output i got from ChatGPT is in the right format/is usable
-if (aiRes && aiRes.output && aiRes.output[0] && aiRes.output[0].content && aiRes.output[0].content[0] && aiRes.output[0].content[0].text)
-{
-aiText = aiRes.output[0].content[0].text
-}
-
-//if aitext is not null, that means the previous check was fine
-if (aiText)
-{
-try
-{
-const parsed = JSON.parse(aiText)
-result.name = parsed.name || result.name
-result.calories = parsed.calories || result.calories
-result.protein = parsed.protein || result.protein
-result.carbs = parsed.carbs || result.carbs
-result.fat = parsed.fat || result.fat
-result.ingredients = parsed.ingredients || result.ingredients
-}
-catch (e)
-{
-console.error("json parse error", e)
-}
-}
-}
-catch (err)
-{
-console.error("ai error", err)
-}
-//stuff above is just broad error catching
-if (!result || !result.name)
-{
-return res.status(500).json({ error: "ai failed to analyze image" })
-}
-
-//this function normalizes what the ai gave us to usable food object
-function normalizeFood(result)
-{
-  if (!result)
-  {
-  return null
+  if (!image) {
+    return res.status(400).json({ error: "missing image" });
   }
-  
-  if (typeof result !== "object")
-{
-return null
-}
 
-let calories = Number(result.calories)
-//all of these if statements below just make sure the avlues they get are positive, usable numbers
-if (isNaN(calories) || calories < 0)
-{
-calories = 0
-}
+  if (!openai) {
+    return res.status(503).json({ error: "AI service not configured" });
+  }
 
-let protein = Number(result.protein)
-if (isNaN(protein) || protein < 0)
-{
-protein = 0
-}
+  // Make sure it is a data URL
+  let dataUrl = image;
+  if (!dataUrl.startsWith("data:")) {
+    dataUrl = "data:image/jpeg;base64," + dataUrl;
+  }
 
-let carbs = Number(result.carbs)
-if (isNaN(carbs) || carbs < 0)
-{
-carbs = 0
-}
+  // Default fallback
+  let result = {
+    name: "unknown food",
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+    ingredients: [],
+  };
 
-let fat = Number(result.fat)
-if (isNaN(fat) || fat < 0)
-{
-fat = 0
-}
+  // Helper: pull all text out of Responses API output
+  function getResponseText(aiRes) {
+    if (!aiRes) return "";
+    if (typeof aiRes.output_text === "string") return aiRes.output_text; // sometimes available
+    const out = aiRes.output || [];
+    let text = "";
+    for (const item of out) {
+      const content = item?.content || [];
+      for (const c of content) {
+        if (c?.type === "output_text" && typeof c?.text === "string") {
+          text += c.text;
+        }
+      }
+    }
+    return text.trim();
+  }
 
-let ingredients = []
-if (Array.isArray(result.ingredients))
-{
-ingredients = result.ingredients.map((item) =>
-{
-if (typeof item === "string")
-{
-return item
-}
-return String(item)
-})
-}
+  // Normalize to usable numbers/arrays
+  function normalizeFood(raw) {
+    if (!raw || typeof raw !== "object") return null;
 
-//we aren't using result.value for these values anymore because they all got tested and if need be, cleaned in the if statements above
-return {
-name: result.name || "unknown",
-calories: calories,
-protein: protein,
-carbs: carbs,
-fat: fat,
-ingredients: ingredients
-}
-}
+    const name = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : "unknown food";
 
-//replacing saveFood with a dummy function because the Postgre server didn't get set up, and I can't be bothered to do that today
-async function saveFood(food)
-{
-return null
-}
+    let calories = Number(raw.calories);
+    if (!Number.isFinite(calories) || calories < 0) calories = 0;
 
-//this function saves the normalized food to the database so we can reuse it later
-/*async function saveFood(food)
-{
-if (!food || !food.name)
-{
-return null
-}
+    let protein = Number(raw.protein);
+    if (!Number.isFinite(protein) || protein < 0) protein = 0;
 
-let saved = null
+    let carbs = Number(raw.carbs);
+    if (!Number.isFinite(carbs) || carbs < 0) carbs = 0;
 
-try
-{
-saved = await prisma.food.create({
-data:
-{
-name: food.name,
-calories: food.calories
-}
-})
-}
-catch (e)
-{
-console.error("db error", e)
-return null
-}
+    let fat = Number(raw.fat);
+    if (!Number.isFinite(fat) || fat < 0) fat = 0;
 
-return saved
-}*/
+    let ingredients = [];
+    if (Array.isArray(raw.ingredients)) {
+      ingredients = raw.ingredients
+        .map((x) => (typeof x === "string" ? x.trim() : String(x).trim()))
+        .filter(Boolean)
+        .slice(0, 25);
+    }
 
-//in case normalizeFood returns NULL, we return an error message
-const clean = normalizeFood(result)
+    return { name, calories, protein, carbs, fat, ingredients };
+  }
 
-if (!clean)
-{
-return res.status(500).json({ error: "ai result invalid" })
-}
+  // Optional: saveFood (currently disabled in your code)
+  async function saveFood(food) {
+    return null;
+  }
 
-const saved = await saveFood(clean)
+  try {
+    const aiRes = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      text: {
+        format: {
+          type: "json_schema",
+          name: "food_estimate",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              name: { type: "string" },
+              calories: { type: "number" },
+              protein: { type: "number" },
+              carbs: { type: "number" },
+              fat: { type: "number" },
+              ingredients: { type: "array", items: { type: "string" } },
+            },
+            required: ["name", "calories", "protein", "carbs", "fat", "ingredients"],
+          },
+        },
+      },
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text:
+                "Look at the image. Identify the food as best you can and estimate nutrition. " +
+                "Return only the JSON object that matches the schema.",
+            },
+            { type: "input_image", image_url: dataUrl },
+          ],
+        },
+      ],
+    });
 
-res.json(saved || clean)
-})
+    const aiText = getResponseText(aiRes);
+
+    let parsed = null;
+    try {
+      parsed = JSON.parse(aiText);
+    } catch (e) {
+      console.error("AI returned non-JSON text:", aiText);
+      throw new Error("AI did not return valid JSON");
+    }
+
+    const clean = normalizeFood(parsed);
+    if (!clean) {
+      return res.status(500).json({ error: "ai result invalid" });
+    }
+
+    // Save (optional)
+    const saved = await saveFood(clean);
+
+    return res.json(saved || clean);
+  } catch (err) {
+    console.error("ai error", err);
+
+    // return fallback so UI doesn’t break, but include error message for debugging
+    return res.status(500).json({
+      ...result,
+      error: "ai failed to analyze image",
+    });
+  }
+});
 
 // --- User Preferences ---
 app.get("/user/preferences", auth, async (req, res) => {
@@ -765,13 +1126,197 @@ app.put("/user/preferences", auth, async (req, res) => {
     
     // Note: This is a simplified version. You may need to map allergies to Allergy IDs
     // For now, just return what was sent
-    res.json({ allergies, dietaryPreferences: dietaryPreferences || [] });
+    const cleanAllergies = allergies.map(a => String(a).trim()).filter(a => a.length > 0);
+    
+    const allergyIds = [];
+    for (const name of cleanAllergies) {
+      let allergy = await prisma.allergy.findFirst({
+        where: { name: name }
+      });
+      if (!allergy) {
+        allergy = await prisma.allergy.create({
+          data: { name: name }
+        });
+      }
+      allergyIds.push(allergy.id);
+    }
+    
+    await prisma.userAllergy.deleteMany({
+      where: { userId: req.userId }
+    });
+    
+    if (allergyIds.length) {
+      await prisma.userAllergy.createMany({
+        data: allergyIds.map((id) => ({
+          userId: req.userId,
+          allergyId: id
+        }))
+      });
+    }
+    
+    res.json({ allergies: cleanAllergies, dietaryPreferences: dietaryPreferences || [] });
   } catch (error) {
     console.error("Update preferences error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+app.get("/health", (req, res) => {
+  res.status(200).json({ ok: true });
+});
+app.get("/", (req, res) => {
+  res.status(200).send("SavvyTrack API OK");
+});
+async function resolveFoodId(input) {
+  const rawId = input?.foodId ?? input?.food_id ?? input?.id ?? null;
+  if (rawId != null && Number.isFinite(Number(rawId))) return Number(rawId);
 
+  const externalId = input?.externalId ?? input?.external_id ?? null;
+  const barcode = input?.barcode ?? null;
+  const name = input?.name ?? null;
+
+  if (barcode) {
+    let food = await prisma.food.findUnique({ where: { barcode: String(barcode) } });
+    if (!food) {
+      food = await prisma.food.create({
+        data: {
+          name: name || `Product ${barcode}`,
+          brand: input?.brand ?? null,
+          calories: input?.kcal ?? input?.calories ?? null,
+          protein: input?.protein ?? 0,
+          carbs: input?.carbs ?? 0,
+          fat: input?.fat ?? 0,
+          fiber: input?.fiber ?? 0,
+          sugar: input?.sugar ?? 0,
+          sodium: input?.sodium ?? 0,
+          ingredients: Array.isArray(input?.ingredients) ? input.ingredients : [],
+          servingSize: input?.servingSize ?? input?.servingQty ?? null,
+          servingUnit: input?.servingUnit ?? null,
+          barcode: String(barcode),
+          imageUrl: input?.imageUrl ?? input?.image_url ?? null,
+          source: input?.source ?? "UPC_API",
+          externalId: externalId ? String(externalId) : null,
+        },
+      });
+    }
+    return food.id;
+  }
+
+  if (externalId) {
+    const source = input?.source ?? "UPC_API";
+
+    let food = await prisma.food.findFirst({
+      where: { externalId: String(externalId), source },
+    });
+
+    if (!food) {
+      food = await prisma.food.create({
+        data: {
+          name: name || `Food ${externalId}`,
+          brand: input?.brand ?? null,
+          calories: input?.kcal ?? input?.calories ?? null,
+          servingSize: input?.servingSize ?? input?.servingQty ?? null,
+          servingUnit: input?.servingUnit ?? null,
+          imageUrl: input?.imageUrl ?? input?.image_url ?? null,
+          source,
+          externalId: String(externalId),
+        },
+      });
+    }
+
+    return food.id;
+  }
+
+  if (name) {
+    let food = await prisma.food.findFirst({
+      where: {
+        name: { equals: String(name), mode: "insensitive" },
+        ...(input?.brand
+          ? { brand: { equals: String(input.brand), mode: "insensitive" } }
+          : {}),
+      },
+    });
+
+    if (!food) {
+      food = await prisma.food.create({
+        data: {
+          name: String(name),
+          brand: input?.brand ?? null,
+          calories: input?.kcal ?? input?.calories ?? null,
+          protein: input?.protein ?? 0,
+          carbs: input?.carbs ?? 0,
+          fat: input?.fat ?? 0,
+          fiber: input?.fiber ?? 0,
+          sugar: input?.sugar ?? 0,
+          sodium: input?.sodium ?? 0,
+          ingredients: Array.isArray(input?.ingredients) ? input.ingredients : [],
+          servingSize: input?.servingSize ?? input?.servingQty ?? null,
+          servingUnit: input?.servingUnit ?? null,
+          imageUrl: input?.imageUrl ?? input?.image_url ?? null,
+          source: input?.source ?? "UPC_API",
+          externalId: null,
+        },
+      });
+    }
+    return food.id;
+  }
+
+  throw new Error("Missing food identifier");
+}
+
+app.get("/saved-foods", auth, async (req, res) => {
+  try {
+    const rows = await prisma.savedFood.findMany({
+      where: { userId: req.userId },
+      include: { food: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json(
+      rows.map((r) => ({
+        id: r.id,
+        createdAt: r.createdAt,
+        food: toFoodResponse(r.food),
+      }))
+    );
+  } catch (e) {
+    res.status(500).json({ error: "failed_to_load_saved_foods" });
+  }
+});
+
+app.post("/saved-foods", auth, async (req, res) => {
+  try {
+    const foodId = await resolveFoodId(req.body);
+
+    const saved = await prisma.savedFood.upsert({
+      where: { userId_foodId: { userId: req.userId, foodId } },
+      update: {},
+      create: { userId: req.userId, foodId },
+      include: { food: true },
+    });
+
+    res.json({ id: saved.id, food: toFoodResponse(saved.food) });
+  } catch (e) {
+    res.status(400).json({ error: "failed_to_save_food", message: e.message });
+  }
+});
+
+app.delete("/saved-foods/:id", auth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
+
+    const row = await prisma.savedFood.findFirst({
+      where: { id, userId: req.userId },
+      select: { id: true },
+    });
+    if (!row) return res.status(404).json({ error: "not_found" });
+
+    await prisma.savedFood.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: "failed_to_delete_saved_food" });
+  }
+});
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`API running on http://0.0.0.0:${PORT}`);

@@ -8,6 +8,7 @@ import { Animated, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView,
 import { API_BASE } from "@/src/constants/api";
 import { Theme } from "@/constants/Theme";
 import { GradientScreen } from "@/components/ui/GradientScreen";
+import { KeyboardDismissAccessory } from "@/components/ui/KeyboardDismissAccessory";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { SecondaryButton } from "@/components/ui/SecondaryButton";
 import { TextField } from "@/components/ui/TextField";
@@ -25,6 +26,8 @@ export default function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
+  const [passwordShakeTrigger, setPasswordShakeTrigger] = useState(0);
+  const [confirmPasswordShakeTrigger, setConfirmPasswordShakeTrigger] = useState(0);
 
   // Animations
   const heroOpacity = useFadeIn(500, 100);
@@ -65,11 +68,15 @@ export default function Register() {
     }
 
     if (password.length < 8) {
+      setPasswordError("Password must be at least 8 characters");
+      setPasswordShakeTrigger((value) => value + 1);
       Alert.alert("Weak Password", "Password must be at least 8 characters long.");
       return;
     }
 
     if (password !== confirmPassword) {
+      setConfirmPasswordError("Passwords do not match");
+      setConfirmPasswordShakeTrigger((value) => value + 1);
       Alert.alert("Password Mismatch", "Passwords do not match. Please try again.");
       return;
     }
@@ -243,6 +250,7 @@ export default function Register() {
                 icon="lock"
                 editable={!loading}
                 error={passwordError}
+                shakeTrigger={passwordShakeTrigger}
                 rightIcon={
                   <Pressable onPress={() => setShowPassword(!showPassword)}>
                     <FontAwesome
@@ -271,6 +279,7 @@ export default function Register() {
                 icon="lock"
                 editable={!loading}
                 error={confirmPasswordError}
+                shakeTrigger={confirmPasswordShakeTrigger}
                 rightIcon={
                   <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
                     <FontAwesome
@@ -327,6 +336,7 @@ export default function Register() {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <KeyboardDismissAccessory />
     </GradientScreen>
   );
 }
