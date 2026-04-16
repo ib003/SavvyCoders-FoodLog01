@@ -6,6 +6,12 @@ import { preferences, UserPreferences } from "./preferences";
  * @param userAllergies - User's allergies (optional, will fetch if not provided)
  * @returns Array of matching allergens found in the food
  */
+const ALLERGEN_ALIASES: Record<string, string[]> = {
+  lactose: ["lactose", "milk", "cheese", "cream", "butter", "yogurt", "whey", "casein", "dairy"],
+  dairy: ["dairy", "milk", "cheese", "cream", "butter", "yogurt", "whey", "casein"],
+  gluten: ["gluten", "wheat", "barley", "rye", "flour", "bread", "pasta"],
+  peanut: ["peanut", "peanut butter", "groundnut"],
+};
 export async function checkAllergens(
   foodTags: string[],
   userAllergies?: string[]
@@ -22,18 +28,23 @@ export async function checkAllergens(
 
   // Find matching allergens
   const matches: string[] = [];
-  normalizedFoodTags.forEach((foodTag, index) => {
-    if (normalizedAllergies.includes(foodTag)) {
-      // Return the original case version from allergies array
-      const originalAllergy = allergies.find(
-        a => a.toLowerCase().trim() === foodTag
-      );
-      if (originalAllergy && !matches.includes(originalAllergy)) {
-        matches.push(originalAllergy);
-      }
-    }
-  });
 
+normalizedAllergies.forEach((allergy, index) => {
+  const relatedTerms = ALLERGEN_ALIASES[allergy] || [allergy];
+
+  const matched = normalizedFoodTags.some((foodTag) =>
+    relatedTerms.some(
+      (term) => foodTag.includes(term) || term.includes(foodTag)
+    )
+  );
+
+  if (matched) {
+    const originalAllergy = allergies[index];
+    if (originalAllergy && !matches.includes(originalAllergy)) {
+      matches.push(originalAllergy);
+    }
+  }
+});
   return matches;
 }
 
@@ -85,7 +96,7 @@ export async function checkDietaryPreferences(
     const conflictList = conflictKeywords[prefLower];
     if (conflictList) {
       conflictList.forEach(conflict => {
-        if (normalizedFoodTags.includes(conflict)) {
+        if (normalizedFoodTags.some(foodTag => foodTag.includes(conflict))) {
           const originalPref = dietaryPrefs.find(
             p => p.toLowerCase().trim() === prefLower
           );

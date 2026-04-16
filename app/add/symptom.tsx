@@ -1,3 +1,4 @@
+import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from "@/components/ui/KeyboardDismissAccessory";
 import { auth } from "@/src/lib/auth";
 import { symptoms } from "@/src/lib/symptoms";
 import { Colors } from "@/constants/Colors";
@@ -134,12 +135,12 @@ export default function Symptom() {
 
       <View style={styles.card}>
         <Text style={styles.h2}>When did symptoms start?</Text>
-        <TextInput style={styles.input} placeholder="e.g., 2 hours after lunch" placeholderTextColor={Colors.neutral.mutedGray} value={whenStarted} onChangeText={setWhenStarted} />
+        <TextInput style={styles.input} placeholder="e.g., 2 hours after lunch" placeholderTextColor={Colors.neutral.mutedGray} value={whenStarted} onChangeText={setWhenStarted} inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID} />
       </View>
 
       <View style={styles.card}>
         <Text style={styles.h2}>How severe? (1-10)</Text>
-        <TextInput style={styles.input} placeholder="e.g., 5" placeholderTextColor={Colors.neutral.mutedGray} value={severity} onChangeText={setSeverity} keyboardType="numeric" />
+        <TextInput style={styles.input} placeholder="e.g., 5" placeholderTextColor={Colors.neutral.mutedGray} value={severity} onChangeText={setSeverity} inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID} keyboardType="numeric" />
       </View>
 
       <View style={styles.card}>
@@ -191,6 +192,7 @@ export default function Symptom() {
           ))}
         </View>
       )}
+      <KeyboardDismissAccessory />
     </ScrollView>
   );
 }
@@ -216,4 +218,3 @@ const styles = StyleSheet.create({
   suggestionItem: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#EDEDED" },
   suggestionText: { color: Colors.neutral.textDark, fontSize: 14, lineHeight: 20 }
 });
-

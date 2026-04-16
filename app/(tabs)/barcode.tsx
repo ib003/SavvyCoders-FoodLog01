@@ -1,8 +1,11 @@
+import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
 import { auth } from "@/src/lib/auth";
+import { MealTypeValue } from "@/src/lib/mealTypes";
 import AllergenWarning from "@/components/AllergenWarning";
 import { Colors } from "@/constants/Colors";
+import { Theme } from "@/constants/Theme";
 import { FontAwesome } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
@@ -10,6 +13,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   Modal,
   Pressable,
   ScrollView,
@@ -21,7 +25,7 @@ import {
 } from "react-native";
 
 interface Food {
-  id: string;
+  id: number;
   name: string;
   brand?: string;
   servingUnit?: string;
@@ -43,6 +47,7 @@ export default function AddBarcode() {
   const [quantityModalVisible, setQuantityModalVisible] = useState(false);
   const [allergenAnalysis, setAllergenAnalysis] = useState<any>(null);
   const [isSafe, setIsSafe] = useState<boolean | null>(null);
+  const [mealType, setMealType] = useState<MealTypeValue>("snack");
 
   useEffect(() => {
     if (!permission) {
@@ -87,6 +92,7 @@ export default function AddBarcode() {
       // Determine if safe
       const safe = !analysis.hasAllergenWarning && !analysis.hasDietaryConflict;
       setIsSafe(safe);
+      setQuantity("1");
 
       setQuantityModalVisible(true);
     } catch (err: any) {
@@ -99,12 +105,24 @@ export default function AddBarcode() {
   };
 
   const handleReset = () => {
+    Keyboard.dismiss();
     setScanned(false);
     setFood(null);
     setError(null);
     setQuantity("1");
     setIsSafe(null);
     setAllergenAnalysis(null);
+    setMealType("snack");
+  };
+
+  const closeQuantityModal = () => {
+    Keyboard.dismiss();
+    setQuantityModalVisible(false);
+  };
+
+  const getServingText = (foodItem: Food) => {
+    const kcal = foodItem.kcal ? Math.round(foodItem.kcal) : 0;
+    return kcal > 0 ? `${kcal} kcal per serving` : "Calories vary by serving";
   };
 
   const handleAddToMeal = async () => {
@@ -118,21 +136,26 @@ export default function AddBarcode() {
       }
 
       const now = new Date();
-      const response = await fetch(`${API_BASE}/meals`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          occurred_at: now.toISOString(),
-          meal_type: "snack",
-          items: [{
-            food_id: food.id,
-            qty: parseFloat(quantity) || 1,
-          }],
-        }),
-      });
+const url = `${API_BASE}/meals`;
+console.log("[Meals] POST:", url);
+
+const response = await fetch(url, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    occurred_at: now.toISOString(),
+    meal_type: mealType,
+    items: [
+      {
+        food_id: food.id,
+        qty: parseFloat(quantity) || 1,
+      },
+    ],
+  }),
+});
 
       if (response.ok) {
         Alert.alert(
@@ -284,11 +307,11 @@ export default function AddBarcode() {
         visible={quantityModalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => setQuantityModalVisible(false)}
+        onRequestClose={closeQuantityModal}
       >
         <Pressable
           style={styles.modalOverlay}
-          onPress={() => setQuantityModalVisible(false)}
+          onPress={closeQuantityModal}
         >
           <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -315,15 +338,22 @@ export default function AddBarcode() {
 
                   {/* Food Info */}
                   <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>{food.name}</Text>
-                    {food.brand && (
-                      <Text style={styles.modalBrand}>{food.brand}</Text>
-                    )}
-                    {food.servingUnit && (
-                      <Text style={styles.modalServing}>
-                        {food.servingQty || 1} {food.servingUnit}
-                      </Text>
-                    )}
+                    <View style={styles.modalHeaderRow}>
+                      <View style={styles.modalHeaderText}>
+                        <Text style={styles.modalTitle}>{food.name}</Text>
+                        {food.brand && (
+                          <Text style={styles.modalBrand}>{food.brand}</Text>
+                        )}
+                        {food.servingUnit && (
+                          <Text style={styles.modalServing}>
+                            {food.servingQty || 1} {food.servingUnit}
+                          </Text>
+                        )}
+                      </View>
+                      <TouchableOpacity style={styles.keyboardDismissButton} onPress={closeQuantityModal}>
+                        <FontAwesome name="times" size={16} color={Colors.neutral.textDark} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
 
                   {/* Allergen Warnings */}
@@ -348,7 +378,7 @@ export default function AddBarcode() {
 
                   {/* Quantity Input */}
                   <View style={styles.quantityContainer}>
-                    <Text style={styles.quantityLabel}>Quantity</Text>
+                    <Text style={styles.quantityLabel}>Servings</Text>
                     <TextInput
                       style={styles.quantityInput}
                       value={quantity}
@@ -356,16 +386,20 @@ export default function AddBarcode() {
                       keyboardType="decimal-pad"
                       placeholder="1"
                     />
-                    {food.servingUnit && (
-                      <Text style={styles.quantityUnit}>{food.servingUnit}</Text>
-                    )}
+                    <Text style={styles.quantityUnit}>{getServingText(food)}</Text>
                   </View>
+
+                  <MealTypeSelector
+                    value={mealType}
+                    onChange={setMealType}
+                    style={styles.mealTypeSelector}
+                  />
 
                   {/* Actions */}
                   <View style={styles.modalActions}>
                     <TouchableOpacity
                       style={[styles.modalButton, styles.cancelButton]}
-                      onPress={() => setQuantityModalVisible(false)}
+                      onPress={closeQuantityModal}
                     >
                       <Text style={styles.cancelButtonText}>Cancel</Text>
                     </TouchableOpacity>
@@ -565,7 +599,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    maxHeight: "80%",
+    minHeight: "65%",
+    maxHeight: "94%",
   },
   safetyBadge: {
     flexDirection: "row",
@@ -590,6 +625,8 @@ const styles = StyleSheet.create({
   modalHeader: {
     marginBottom: 20,
   },
+  modalHeaderRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: Theme.spacing.md },
+  modalHeaderText: { flex: 1 },
   modalTitle: {
     fontSize: 24,
     fontWeight: "800",
@@ -605,6 +642,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.neutral.mutedGray,
   },
+  keyboardDismissButton: { width: 32, height: 32, borderRadius: Theme.radius.full, alignItems: "center", justifyContent: "center", backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0" },
 
   calorieCard: {
     backgroundColor: `${Colors.primary.green}10`,
@@ -648,6 +686,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 13,
     color: Colors.neutral.mutedGray,
+  },
+  mealTypeSelector: {
+    marginBottom: 20,
   },
   modalActions: {
     flexDirection: "row",
