@@ -24,6 +24,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [passwordShakeTrigger, setPasswordShakeTrigger] = useState(0);
+  const [loginError, setLoginError] = useState("");
 
   const isCredentialError = (message: string) => {
     const lowerMessage = message.toLowerCase();
@@ -95,22 +96,29 @@ export default function Login() {
       return;
     }
 
+    setLoginError("");
+    console.log("[Login] handleLogin called");
     setLoading(true);
     setPasswordError("");
     try {
       const result = await auth.login(email.trim(), password);
+      console.log("[Login] auth.login result:", result);
       if (result.token) {
+        console.log("[Login] Token received, redirecting to dashboard");
         setTimeout(() => {
           router.replace("/(tabs)/Dashboard");
         }, 100);
       }
     } catch (error: any) {
       const errorMessage = error.message || "Unable to sign in. Please check your credentials and try again.";
+      console.error("[Login] handleLogin failed:", error);
+      setLoginError(errorMessage);
       const isBadPasswordError = isCredentialError(errorMessage);
 
       if (isBadPasswordError) {
         setPasswordError("Password is incorrect");
         setPasswordShakeTrigger((value) => value + 1);
+        setLoginError("Password is incorrect");
         return;
       }
 
@@ -122,12 +130,12 @@ export default function Login() {
         [
           { text: "OK", style: "default" },
           ...(errorMessage.includes("connect") ? [
-            { 
-              text: "Check Server", 
+            {
+              text: "Check Server",
               onPress: () => {
                 Alert.alert(
                   "Server Connection",
-                  `Make sure your server is running at:\n\n${API_BASE}\n\nAnd your device is on the same network.`,
+                  `The hosted server is:\n\n${API_BASE}\n\nIf Render is waking up from a cold start, please wait a few seconds and try again.`,
                 );
               }
             }
@@ -278,6 +286,10 @@ export default function Login() {
                 />
               </Animated.View>
 
+              {loginError ? (
+                <Text style={styles.loginErrorText}>{loginError}</Text>
+              ) : null}
+
               <Divider text="OR" />
 
               <Animated.View style={{ opacity: button2Opacity }}>
@@ -386,6 +398,12 @@ const styles = StyleSheet.create({
   },
   signInButton: {
     marginTop: Theme.spacing.sm,
+  },
+  loginErrorText: {
+    ...Theme.typography.bodySmall,
+    color: '#FF4D4F',
+    textAlign: 'center',
+    marginTop: Theme.spacing.xs,
   },
   oauthButton: {
     marginTop: Theme.spacing.xs,
