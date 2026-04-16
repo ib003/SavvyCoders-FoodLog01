@@ -6,14 +6,17 @@ import { UserPreferences, preferences } from "@/src/lib/preferences";
 import { FontAwesome } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, usePathname, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function Profile() {
   const router = useRouter();
+  const pathname = usePathname();
   const [email, setEmail] = useState<string | null>(null);
   const [userPrefs, setUserPrefs] = useState<UserPreferences>({ allergies: [], dietaryPreferences: [] });
+  const isInitialMount = useRef(true);
+  const previousPath = useRef(pathname);
 
   useEffect(() => {
     const checkAuthAndLoad = async () => {
@@ -27,12 +30,30 @@ export default function Profile() {
       loadPreferences();
     };
     checkAuthAndLoad();
+    isInitialMount.current = false;
   }, []);
+
+  // Track pathname changes to detect modal navigation
+  useEffect(() => {
+    previousPath.current = pathname;
+  }, [pathname]);
 
   useFocusEffect(
     useCallback(() => {
-      loadPreferences();
-    }, [])
+      // Skip reload if this is the initial mount
+      if (isInitialMount.current) {
+        return;
+      }
+      
+      // Skip reload if we're coming back from a modal route
+      const currentPath = pathname;
+      const isComingFromModal = currentPath === previousPath.current;
+      
+      if (!isComingFromModal) {
+        // Only reload when switching tabs, not when closing modals
+        loadPreferences();
+      }
+    }, [pathname])
   );
 
   const loadUserData = async () => {
