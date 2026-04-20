@@ -3,7 +3,7 @@ import { API_BASE } from "../../constants/api";
 
 // Slight tweak: allow null instead of throwing immediately
 async function readToken(): Promise<string | null> {
- return await AsyncStorage.getItem("token");
+  return await AsyncStorage.getItem("auth_token");
 }
 
 export type SavedFoodRow = {

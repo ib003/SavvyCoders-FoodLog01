@@ -8,7 +8,7 @@ import { TextField } from "@/components/ui/TextField";
 import { Theme } from "@/constants/Theme";
 import { API_BASE } from "@/src/constants/api";
 import { auth } from "@/src/lib/auth";
-import { signInWithApple, signInWithGoogle } from "@/src/lib/oauth";
+import { signInWithGoogle } from "@/src/lib/oauth";
 import { useFadeIn, useScaleIn, useSlideInY } from "@/src/ui/animations";
 import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -45,7 +45,6 @@ export default function Login() {
   const formScale = useScaleIn(400, 300);
   const button1Opacity = useFadeIn(300, 500);
   const button2Opacity = useFadeIn(300, 600);
-  const button3Opacity = useFadeIn(300, 700);
 
   // Single auth redirect guard: if token exists -> go to tabs, else stay on login
   useEffect(() => {
@@ -139,46 +138,20 @@ export default function Login() {
     }
   };
 
-  const handleOAuth = async (provider: "google" | "apple") => {
+  const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      console.log(`[Login] Starting ${provider} OAuth...`);
-      
-      const result = provider === "google" 
-        ? await signInWithGoogle()
-        : await signInWithApple();
-      
-      console.log(`[Login] ${provider} OAuth result:`, result.success ? "Success" : "Failed", result.error || "");
-      
+      const result = await signInWithGoogle();
       if (result.success && result.token) {
-        console.log(`[Login] ${provider} sign-in successful, navigating to dashboard...`);
-        setTimeout(() => {
-          router.replace("/(tabs)/Dashboard");
-        }, 100);
+        setTimeout(() => router.replace("/(tabs)/Dashboard"), 100);
       } else {
-        const errorMessage = result.error || `${provider === "google" ? "Google" : "Apple"} sign-in failed. Please try again.`;
-        console.error(`[Login] ${provider} OAuth failed:`, errorMessage);
-        Alert.alert(
-          "Sign In Failed",
-          errorMessage
-        );
+        Alert.alert("Sign In Failed", result.error || "Google sign-in failed. Please try again.");
       }
     } catch (error: any) {
-      console.error(`[Login] ${provider} OAuth unexpected error:`, error);
-      Alert.alert(
-        "Sign In Failed",
-        `Failed to sign in with ${provider === "google" ? "Google" : "Apple"}. ${error.message || "Please try again."}`
-      );
+      Alert.alert("Sign In Failed", error.message || "Please try again.");
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSkipLoginDev = () => {
-    (auth as any).getToken = async () => "dev-demo-token-12345678901234567890";
-    (auth as any).isAuthenticated = async () => true;
-
-    router.replace("/(tabs)/Dashboard");
   };
 
   return (
@@ -283,40 +256,12 @@ export default function Login() {
               <Animated.View style={{ opacity: button2Opacity }}>
                 <SecondaryButton
                   title="Continue with Google"
-                  onPress={() => handleOAuth("google")}
+                  onPress={handleGoogleLogin}
                   disabled={loading}
                   icon={<FontAwesome name="google" size={18} color={Theme.colors.text.primary} />}
                   style={styles.oauthButton}
                 />
               </Animated.View>
-
-              <Pressable
-                onPress={handleSkipLoginDev}
-                disabled={loading}
-                style={{ marginTop: Theme.spacing.md, alignItems: "center" }}
-              >
-                <Text
-                  style={{
-                    ...Theme.typography.captionSmall,
-                    color: Theme.colors.text.secondary,
-                    textDecorationLine: "underline",
-                  }}
-                >
-                  Skip login for demo
-                </Text>
-              </Pressable>
-
-              {Platform.OS === "ios" && (
-                <Animated.View style={{ opacity: button3Opacity }}>
-                  <SecondaryButton
-                    title="Continue with Apple"
-                    onPress={() => handleOAuth("apple")}
-                    disabled={loading}
-                    icon={<FontAwesome name="apple" size={18} color={Theme.colors.text.primary} />}
-                    style={styles.oauthButton}
-                  />
-                </Animated.View>
-              )}
 
               <View style={styles.footer}>
                 <Text style={styles.footerText}>Don't have an account? </Text>
