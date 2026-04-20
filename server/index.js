@@ -503,7 +503,12 @@ app.get("/foods", async (req, res) => {
       const payload = await fdcResp.json();
       const list = Array.isArray(payload.foods) ? payload.foods : [];
 
-      const candidates = list
+      const dataTypePriority = { "Foundation": 0, "SR Legacy": 1, "Survey (FNDDS)": 2, "Branded": 3 };
+      const sorted = [...list].sort((a, b) =>
+        (dataTypePriority[a.dataType] ?? 4) - (dataTypePriority[b.dataType] ?? 4)
+      );
+
+      const candidates = sorted
         .map((f) => {
           const nutrients = Array.isArray(f.foodNutrients) ? f.foodNutrients : [];
 
@@ -524,30 +529,30 @@ const energy = nutrients.find((n) =>
 
           const servingSize = (typeof f.servingSize === "number") ? f.servingSize : null;
           const servingUnit = f.servingSizeUnit ? String(f.servingSizeUnit) : null;
-          const protein = findNutrientValue(["protein"]);
-         const carbs = findNutrientValue(["carbohydrate"]);
-         const fat = findNutrientValue(["total lipid", "fat"]);
+          //serving size in FDC per 100g, scaling accordingly
+          const scale = (servingSize != null && servingSize > 0) ? servingSize / 100 : 1;
+          const protein = findNutrientValue(["protein"]) * scale;
+          const carbs = findNutrientValue(["carbohydrate"]) * scale;
+          const fat = findNutrientValue(["total lipid", "fat"]) * scale;
+          const scaledCalories = (typeof calories === "number") ? calories * scale : null;
 
           return {
-            //exactly like the model Food fields
             name: String(f.description || ""),
             brand: f.brandOwner || f.brandName || null,
             description: null,
             servingSize: servingSize,
             servingUnit: servingUnit || null,
-            calories: (typeof calories === "number") ? Math.round(calories) : null,
-            protein: Number(protein) || 0,
-           carbs: Number(carbs) || 0,
-           fat: Number(fat) || 0,
-           fiber: 0,
-           sugar: 0,
-           sodium: 0,
+            calories: (typeof scaledCalories === "number") ? Math.round(scaledCalories) : null,
+            protein: Math.round(protein * 10) / 10,
+            carbs: Math.round(carbs * 10) / 10,
+            fat: Math.round(fat * 10) / 10,
+            fiber: 0,
+            sugar: 0,
+            sodium: 0,
             barcode: null,
             imageUrl: null,
             source: "FDC_API",
             externalId: f.fdcId ? String(f.fdcId) : null,
-            servingQty: servingSize,
-            kcal: (typeof calories === "number") ? Math.round(calories) : null,
           };
         })
         .filter((x) => x.name);
