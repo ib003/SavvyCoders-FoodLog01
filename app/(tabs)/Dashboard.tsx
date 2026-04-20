@@ -1,5 +1,4 @@
 import AllergenWarning from "@/components/AllergenWarning";
-import NutritionInsights from "@/components/NutritionInsights";
 import { Card } from "@/components/ui/Card";
 import { Theme } from "@/constants/Theme";
 import { API_BASE } from "@/src/constants/api";
@@ -19,13 +18,17 @@ interface Meal {
   mealType: string;
   occurredAt: string;
   items: Array<{
+    qty: number;
+    kcal?: number | null;
+    protein_g?: number | null;
+    carbs_g?: number | null;
+    fat_g?: number | null;
     food: {
       id: string;
       name: string;
       brand?: string;
       kcal?: number;
     };
-    qty: number;
   }>;
 }
 
@@ -40,6 +43,12 @@ interface AlertItem {
     warnings: string[];
   };
 }
+interface DailyNutritionTotals {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -49,6 +58,12 @@ export default function DashboardScreen() {
   const [todayMeals, setTodayMeals] = useState<Meal[]>([]);
   const [todaySymptoms, setTodaySymptoms] = useState<Symptom[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [dailyTotals, setDailyTotals] = useState<DailyNutritionTotals>({
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+  });
   const isInitialMount = useRef(true);
   const previousPath = useRef(pathname);
 
@@ -67,7 +82,7 @@ export default function DashboardScreen() {
         router.replace("/");
         return;
       }
-      loadDashboardData();
+      await loadDashboardData();
     };
     checkAuthAndLoad();
     isInitialMount.current = false;
@@ -111,26 +126,89 @@ export default function DashboardScreen() {
   };
 
   const loadTodayMeals = async () => {
-    try {
-      const token = await auth.getToken();
-      if (!token) return;
+  try {
+    const token = await auth.getToken();
+    if (!token) return;
 
-      const today = new Date().toISOString().split("T")[0];
-      const response = await fetch(`${API_BASE}/meals?date=${today}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+        const today = new Date().toISOString().split("T")[0];
+    const url = `${API_BASE}/meals?date=${today}`;
+    console.log("[Meals] GET:", url);
+    console.log("[Meals] tokenLen:", token?.length);
+    console.log("[Meals] authHeader:", `Bearer ${token}`.slice(0, 25) + "...");
 
-      if (response.ok) {
-        const meals = await response.json();
-        setTodayMeals(meals);
-        await checkAlerts(meals);
-      }
-    } catch (error) {
-      console.error("Failed to load meals:", error);
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    console.log("[Meals] status:", response.status);
+
+    if (!response.ok) {
+      const txt = await response.text().catch(() => "");
+      console.log("[Meals] body:", txt.slice(0, 200));
+      throw new Error(`Meals fetch failed: ${response.status}`);
     }
-  };
+
+    const raw = await response.json();
+
+    console.log("[Dashboard] raw meals =", JSON.stringify(raw));
+    console.log("[Dashboard] raw first item =", JSON.stringify(raw?.[0]));
+
+    const normalized: Meal[] = (raw || []).map((m: any) => ({
+      id: String(m.id),
+      mealType: m.mealType ?? m.meal_type ?? "UNKNOWN",
+      occurredAt:
+        m.dateTime ??
+        m.occurredAt ??
+        m.occurred_at ??
+        new Date().toISOString(),
+            items: (m.items || []).map((it: any) => ({
+        qty: Number(it.qty ?? it.quantity ?? 1),
+        kcal: Number(it.kcal ?? it.calories ?? it.food?.kcal ?? it.food?.calories) || null,
+        protein_g: Number(it.protein_g ?? it.protein ?? it.food?.protein_g ?? it.food?.protein ?? 0) || 0,
+        carbs_g: Number(it.carbs_g ?? it.carbs ?? it.food?.carbs_g ?? it.food?.carbs ?? 0) || 0,
+        fat_g: Number(it.fat_g ?? it.fat ?? it.food?.fat_g ?? it.food?.fat ?? 0) || 0,
+        food: {
+          id: String(it.food?.id ?? it.foodId ?? it.food_id ?? "unknown"),
+          name: it.food?.name ?? it.name ?? "Unknown food",
+          brand: it.food?.brand ?? it.brand,
+          kcal: Number(it.food?.kcal ?? it.food?.calories ?? it.kcal ?? it.calories ?? 0) || 0,
+        },
+      })),
+    }));
+
+    setTodayMeals(normalized);
+        const totals = normalized.reduce<DailyNutritionTotals>((acc, meal) => {
+      meal.items.forEach((item) => {
+        const qty = Number(item.qty ?? 1);
+        const kcal = Number(item.kcal ?? item.food.kcal ?? 0);
+        const protein = Number(item.protein_g ?? 0);
+        const carbs = Number(item.carbs_g ?? 0);
+        const fat = Number(item.fat_g ?? 0);
+
+        acc.calories += Number.isFinite(kcal) ? kcal * qty : 0;
+        acc.protein += Number.isFinite(protein) ? protein * qty : 0;
+        acc.carbs += Number.isFinite(carbs) ? carbs * qty : 0;
+        acc.fat += Number.isFinite(fat) ? fat * qty : 0;
+      });
+      return acc;
+    }, {
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+    });
+
+    setDailyTotals({
+      calories: Math.round(totals.calories),
+      protein: Math.round(totals.protein * 10) / 10,
+      carbs: Math.round(totals.carbs * 10) / 10,
+      fat: Math.round(totals.fat * 10) / 10,
+    });
+    await checkAlerts(normalized);
+  } catch (error) {
+    console.error("Failed to load meals:", error);
+  }
+};
 
   const checkAlerts = async (meals: Meal[]) => {
     const userPrefs = await preferences.fetch();
@@ -193,7 +271,39 @@ export default function DashboardScreen() {
                 throw new Error("Failed to delete meal");
               }
 
-              setTodayMeals((prev) => prev.filter((m) => m.id !== mealId));
+                           setTodayMeals((prev) => {
+                const updatedMeals = prev.filter((m) => m.id !== mealId);
+
+                const totals = updatedMeals.reduce<DailyNutritionTotals>((acc, meal) => {
+                  meal.items.forEach((item) => {
+                    const qty = Number(item.qty ?? 1);
+                    const kcal = Number(item.kcal ?? item.food.kcal ?? 0);
+                    const protein = Number(item.protein_g ?? 0);
+                    const carbs = Number(item.carbs_g ?? 0);
+                    const fat = Number(item.fat_g ?? 0);
+
+                    acc.calories += Number.isFinite(kcal) ? kcal * qty : 0;
+                    acc.protein += Number.isFinite(protein) ? protein * qty : 0;
+                    acc.carbs += Number.isFinite(carbs) ? carbs * qty : 0;
+                    acc.fat += Number.isFinite(fat) ? fat * qty : 0;
+                  });
+                  return acc;
+                }, {
+                  calories: 0,
+                  protein: 0,
+                  carbs: 0,
+                  fat: 0,
+                });
+
+                setDailyTotals({
+                  calories: Math.round(totals.calories),
+                  protein: Math.round(totals.protein * 10) / 10,
+                  carbs: Math.round(totals.carbs * 10) / 10,
+                  fat: Math.round(totals.fat * 10) / 10,
+                });
+
+                return updatedMeals;
+              });
               setAlerts((prev) => prev.filter((a) => a.meal.id !== mealId));
             } catch (error) {
               console.error("Failed to delete meal:", error);
@@ -231,6 +341,13 @@ export default function DashboardScreen() {
       day: "numeric",
     });
   };
+
+ const getMealCalories = (meal: Meal) =>
+  meal.items.reduce((sum, item) => {
+    const qty = Number(item.qty ?? 1);
+    const kcal = Number(item.kcal ?? item.food.kcal ?? 0);
+    return sum + (Number.isFinite(kcal) && kcal > 0 ? kcal * qty : 0);
+  }, 0);
 
   if (loading) {
     return (
@@ -417,20 +534,26 @@ export default function DashboardScreen() {
                 </View>
 
                 <View style={styles.mealItems}>
-                  {meal.items.map((item, index) => (
-                    <View 
-                      key={item.food.id} 
-                      style={[
-                        styles.mealItem,
-                        index < meal.items.length - 1 && styles.mealItemBorder
-                      ]}
-                    >
-                      <Text style={styles.mealItemName}>{item.food.name}</Text>
-                      {item.food.kcal && (
-                        <Text style={styles.mealItemKcal}>{item.food.kcal} kcal</Text>
-                      )}
-                    </View>
-                  ))}
+                  {meal.items.map((item, index) => {
+  const kcal = Number(item.kcal ?? item.food.kcal);
+  const showKcal = Number.isFinite(kcal) && kcal > 0;
+
+  return (
+    <View
+      key={`${meal.id}-${index}-${item.food.id}`}
+      style={[
+        styles.mealItem,
+        index < meal.items.length - 1 && styles.mealItemBorder
+      ]}
+    >
+      <Text style={styles.mealItemName}>{item.food.name}</Text>
+
+      {showKcal && (
+        <Text style={styles.mealItemKcal}>{Math.round(kcal)} kcal</Text>
+      )}
+    </View>
+  );
+})}
                 </View>
                   </Card>
                 </Animated.View>
@@ -492,8 +615,34 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Nutrition Insights */}
-        <NutritionInsights />
+                {/* Nutrition Insights */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <FontAwesome name="bar-chart" size={20} color={Theme.colors.primary.main} style={styles.sectionIcon} />
+            <Text style={styles.sectionTitle}>Nutrition Insights</Text>
+          </View>
+
+          <Card style={styles.mealCard} padding="lg" variant="elevated">
+            <View style={styles.nutritionRow}>
+              <Text style={styles.nutritionLabel}>Calories</Text>
+              <Text style={styles.nutritionValue}>{dailyTotals.calories} kcal</Text>
+            </View>
+            <View style={[styles.nutritionRow, styles.mealItemBorder]}>
+              <Text style={styles.nutritionLabel}>Protein</Text>
+              <Text style={styles.nutritionValue}>{dailyTotals.protein} g</Text>
+            </View>
+            <View style={[styles.nutritionRow, styles.mealItemBorder]}>
+              <Text style={styles.nutritionLabel}>Carbs</Text>
+              <Text style={styles.nutritionValue}>{dailyTotals.carbs} g</Text>
+            </View>
+            <View style={[styles.nutritionRow, styles.mealItemBorder]}>
+              <Text style={styles.nutritionLabel}>Fat</Text>
+              <Text style={styles.nutritionValue}>{dailyTotals.fat} g</Text>
+            </View>
+          </Card>
+
+          
+        </View>
 
         {/* Summary Stats */}
         <View style={styles.statsContainer}>
@@ -717,6 +866,22 @@ const styles = StyleSheet.create({
     ...Theme.typography.caption,
     color: Theme.colors.text.secondary,
     fontWeight: '600',
+  },
+    nutritionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: Theme.spacing.md,
+  },
+  nutritionLabel: {
+    ...Theme.typography.body,
+    fontWeight: '600',
+    color: Theme.colors.text.primary,
+  },
+  nutritionValue: {
+    ...Theme.typography.bodySmall,
+    fontWeight: '700',
+    color: Theme.colors.primary.main,
   },
   // Symptoms
   symptomsContainer: {

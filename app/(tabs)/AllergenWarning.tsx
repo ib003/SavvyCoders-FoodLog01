@@ -71,7 +71,7 @@ export default function AllergenWarningScreen() {
 
       const alerts: AlertItem[] = [];
 
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i <= 7; i++) {
         const date = new Date(sevenDaysAgo);
         date.setDate(date.getDate() + i);
         const dateStr = date.toISOString().split("T")[0];

@@ -1,3 +1,4 @@
+import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from '@/components/ui/KeyboardDismissAccessory';
 import { Text, View } from '@/components/Themed';
 import { getSystemPrompt, sendMessageToChatGPT } from '@/src/lib/chatgpt';
 import { FontAwesome } from '@expo/vector-icons';
@@ -5,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ChatMessage {
   id: string;
@@ -14,6 +16,7 @@ interface ChatMessage {
 
 export default function ChatScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: '1', text: 'Hello! I\'m your food tracking assistant. How can I help you today?', sender: 'bot' }
@@ -88,11 +91,15 @@ export default function ChatScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.bottom : 0}
+      style={styles.container}
+    >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
-          <FontAwesome name="times" size={24} color="#fff" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <FontAwesome name="arrow-left" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Chat Support</Text>
         <View style={styles.headerSpacer} />
@@ -131,14 +138,12 @@ export default function ChatScreen() {
       </ScrollView>
 
       {/* Input Area */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.inputContainer}
-      >
+      <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         <TextInput
           style={styles.input}
           value={message}
           onChangeText={setMessage}
+          inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
           placeholder="Type a message..."
           placeholderTextColor="#999"
           multiline
@@ -156,10 +161,11 @@ export default function ChatScreen() {
             <FontAwesome name="send" size={20} color="#fff" />
           )}
         </TouchableOpacity>
-      </KeyboardAvoidingView>
+      </View>
+      <KeyboardDismissAccessory />
 
       <StatusBar style={Platform.OS === 'ios' ? 'light' : 'auto'} />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -182,7 +188,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
-  closeButton: {
+  backButton: {
     width: 40,
     height: 40,
     alignItems: 'center',
