@@ -159,6 +159,8 @@ export default function AddSearch() {
 
   const [selectedFood, setSelectedFood] = useState<Food | null>(null);
   const [quantity, setQuantity] = useState("1");
+  const [weightInput, setWeightInput] = useState("");
+  const [weightUnit, setWeightUnit] = useState<"g" | "oz" | "lb">("g");
   const [quantityModalVisible, setQuantityModalVisible] = useState(false);
 
   const [mealItems, setMealItems] = useState<MealItem[]>([]);
@@ -202,14 +204,24 @@ export default function AddSearch() {
 
   const getServingText = (food: Food) => {
     const kcal = Math.round(getFoodKcal(food));
-    return kcal > 0 ? `${kcal} kcal per serving` : "Calories vary by serving";
+    if (kcal <= 0) return "Calories vary by serving";
+    const hasServing = food.servingSize && Number(food.servingSize) > 0;
+    return hasServing
+      ? `${kcal} kcal per serving (${food.servingSize}${food.servingUnit ?? "g"})`
+      : `${kcal} kcal per 100g — use weight field below`;
   };
 
-  const getParsedQty = () => {
+  const getParsedQty = (): number => {
+    const w = parseFloat(weightInput);
+    if (w > 0 && selectedFood) {
+      const grams = weightUnit === "g" ? w : weightUnit === "oz" ? w * 28.3495 : w * 453.592;
+      const servingSize = Number(selectedFood.servingSize);
+      return servingSize > 0 ? grams / servingSize : grams / 100;
+    }
     return parseFloat(String(quantity).replace(/[^\d.]/g, "")) || 1;
   };
 
-  const selectedQty = useMemo(() => getParsedQty(), [quantity]);
+  const selectedQty = useMemo(() => getParsedQty(), [quantity, weightInput, weightUnit, selectedFood]);
 
   const handleSaveFood = async (food: Food) => {
     try {
@@ -261,6 +273,8 @@ export default function AddSearch() {
     setQuantityModalVisible(false);
     setSelectedFood(null);
     setQuantity("1");
+    setWeightInput("");
+    setWeightUnit("g");
     setAllergenAnalysis(null);
   };
 
@@ -565,12 +579,10 @@ export default function AddSearch() {
                 <View style={styles.foodInfo}>
                   <Text style={styles.foodName}>{food.name}</Text>
                   {!!food.brand && <Text style={styles.foodBrand}>{food.brand}</Text>}
-                  {servingUnit ? (
-                    <Text style={styles.foodServing}>
-                      {Number.isFinite(servingQty) && servingQty > 0 ? servingQty : 1} {servingUnit}
-                    </Text>
+                  {servingUnit && Number.isFinite(servingQty) && servingQty > 0 ? (
+                    <Text style={styles.foodServing}>{servingQty} {servingUnit}</Text>
                   ) : (
-                    <Text style={styles.foodServing}>1 serving</Text>
+                    <Text style={styles.foodServing}>per 100g</Text>
                   )}
                   <Text style={styles.foodMacros}>
                     P {Math.round(getFoodProtein(food))}g • C {Math.round(getFoodCarbs(food))}g • F {Math.round(getFoodFat(food))}g
@@ -639,12 +651,37 @@ export default function AddSearch() {
                   <TextInput
                     style={styles.quantityInput}
                     value={quantity}
-                    onChangeText={setQuantity}
+                    onChangeText={(t) => { setQuantity(t); setWeightInput(""); }}
                     inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
                     keyboardType="numbers-and-punctuation"
                     placeholder="1"
                   />
                   <Text style={styles.quantityUnit}>{getServingText(selectedFood)}</Text>
+                </View>
+
+                <View style={styles.quantityContainer}>
+                  <Text style={styles.quantityLabel}>Or enter by weight</Text>
+                  <View style={styles.weightRow}>
+                    <TextInput
+                      style={[styles.quantityInput, { flex: 1 }]}
+                      value={weightInput}
+                      onChangeText={(t) => { setWeightInput(t); setQuantity("1"); }}
+                      inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
+                      keyboardType="numbers-and-punctuation"
+                      placeholder="e.g. 150"
+                    />
+                    <View style={styles.weightUnitRow}>
+                      {(["g", "oz", "lb"] as const).map((u) => (
+                        <TouchableOpacity
+                          key={u}
+                          style={[styles.unitBtn, weightUnit === u && styles.unitBtnActive]}
+                          onPress={() => setWeightUnit(u)}
+                        >
+                          <Text style={[styles.unitBtnText, weightUnit === u && styles.unitBtnTextActive]}>{u}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
                 </View>
 
                 {selectedFood && (
@@ -927,6 +964,35 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.neutral.backgroundLight,
     borderWidth: 1,
     borderColor: "#E0E0E0",
+  },
+  weightRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  weightUnitRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  unitBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: Theme.radius.md,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    backgroundColor: Colors.neutral.backgroundLight,
+  },
+  unitBtnActive: {
+    borderColor: Colors.primary.green,
+    backgroundColor: `${Colors.primary.green}15`,
+  },
+  unitBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.neutral.mutedGray,
+  },
+  unitBtnTextActive: {
+    color: Colors.primary.green,
   },
   quantityContainer: {
     marginBottom: Theme.spacing.xl,
