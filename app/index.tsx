@@ -108,7 +108,7 @@ export default function Login() {
       const isBadPasswordError = isCredentialError(errorMessage);
 
       if (isBadPasswordError) {
-        setPasswordError("Password is incorrect");
+        setPasswordError("Username or password is incorrect");
         setPasswordShakeTrigger((value) => value + 1);
         return;
       }

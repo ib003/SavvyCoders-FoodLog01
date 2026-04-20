@@ -6,8 +6,8 @@ import { API_BASE } from "@/src/constants/api";
 import { auth } from "@/src/lib/auth";
 import { MealTypeValue } from "@/src/lib/mealTypes";
 import { FontAwesome } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Keyboard } from "react-native";
 import {
@@ -45,9 +45,9 @@ export default function AddSaved() {
   const [quantityModalVisible, setQuantityModalVisible] = useState(false);
   const [savingMeal, setSavingMeal] = useState(false);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     loadSavedFoods();
-  }, []);
+  }, []));
 
   const loadSavedFoods = async () => {
     setLoading(true);
