@@ -1298,6 +1298,57 @@ app.get("/saved-foods", auth, async (req, res) => {
   }
 });
 
+app.put("/user/email", auth, async (req, res) => {
+  try {
+    const { newEmail, currentPassword } = req.body;
+    if (!newEmail || !currentPassword) {
+      return res.status(400).json({ error: "newEmail and currentPassword are required" });
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const normalized = newEmail.trim().toLowerCase();
+    if (!emailRegex.test(normalized)) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
+    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (user.passwordHash) {
+      const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!valid) return res.status(401).json({ error: "Current password is incorrect" });
+    }
+    const existing = await prisma.user.findUnique({ where: { email: normalized } });
+    if (existing && existing.id !== req.userId) {
+      return res.status(400).json({ error: "Email already in use" });
+    }
+    await prisma.user.update({ where: { id: req.userId }, data: { email: normalized } });
+    res.json({ email: normalized });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to update email" });
+  }
+});
+
+app.put("/user/password", auth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "currentPassword and newPassword are required" });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: "New password must be at least 8 characters" });
+    }
+    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (user.passwordHash) {
+      const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!valid) return res.status(401).json({ error: "Current password is incorrect" });
+    }
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({ where: { id: req.userId }, data: { passwordHash: newHash } });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to update password" });
+  }
+});
+
 app.post("/saved-foods", auth, async (req, res) => {
   try {
     const foodId = await resolveFoodId(req.body);

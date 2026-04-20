@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/Card";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { Theme } from "@/constants/Theme";
+import { API_BASE } from "@/src/constants/api";
 import { auth } from "@/src/lib/auth";
 import { UserPreferences, preferences } from "@/src/lib/preferences";
 import { FontAwesome } from "@expo/vector-icons";
@@ -8,13 +9,21 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, usePathname, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Linking, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 export default function Profile() {
   const router = useRouter();
   const pathname = usePathname();
   const [email, setEmail] = useState<string | null>(null);
   const [userPrefs, setUserPrefs] = useState<UserPreferences>({ allergies: [], dietaryPreferences: [] });
+  const [emailModalVisible, setEmailModalVisible] = useState(false);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailPassword, setEmailPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
   const isInitialMount = useRef(true);
   const previousPath = useRef(pathname);
 
@@ -44,11 +53,11 @@ export default function Profile() {
       if (isInitialMount.current) {
         return;
       }
-      
+
       // Skip reload if we're coming back from a modal route
       const currentPath = pathname;
       const isComingFromModal = currentPath === previousPath.current;
-      
+
       if (!isComingFromModal) {
         // Only reload when switching tabs, not when closing modals
         loadPreferences();
@@ -115,12 +124,71 @@ export default function Profile() {
     );
   };
 
+  const handleUpdateEmail = async () => {
+    if (!newEmail.trim() || !emailPassword) {
+      Alert.alert("Error", "Please fill in all fields.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const token = await auth.getToken();
+      const res = await fetch(`${API_BASE}/user/email`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ newEmail: newEmail.trim(), currentPassword: emailPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update email");
+      setEmail(data.email);
+      setEmailModalVisible(false);
+      setNewEmail(""); setEmailPassword("");
+      Alert.alert("Success", "Email updated!");
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      Alert.alert("Error", "Please fill in all fields.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert("Error", "Passwords do not match.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      Alert.alert("Error", "Password must be at least 8 characters.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const token = await auth.getToken();
+      const res = await fetch(`${API_BASE}/user/password`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update password");
+      setPasswordModalVisible(false);
+      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+      Alert.alert("Success", "Password updated!");
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleContactSupport = () => {
     const email = "mocksupport@foodlogapp.com";
     const subject = "App Support Request";
     const body = "Hello,\n\nI need help with:\n\n";
     const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    
+
     Linking.openURL(mailtoUrl).catch(() => {
       Alert.alert("Error", "Unable to open email client. Please contact us at mocksupport@foodlogapp.com");
     });
@@ -128,7 +196,7 @@ export default function Profile() {
 
   return (
     <View style={styles.container}>
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -163,7 +231,7 @@ export default function Profile() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account Information</Text>
           <Card style={styles.card} padding="none" variant="elevated">
-            <View style={styles.cardRow}>
+            <TouchableOpacity style={styles.cardRow} activeOpacity={0.7} onPress={() => { setNewEmail(email ?? ""); setEmailModalVisible(true); }}>
               <View style={[styles.cardIconContainer, { backgroundColor: `${Theme.colors.primary.main}15` }]}>
                 <FontAwesome name="envelope" size={18} color={Theme.colors.primary.main} />
               </View>
@@ -172,7 +240,7 @@ export default function Profile() {
                 <Text style={styles.cardValue} numberOfLines={1}>{email ?? "Not available"}</Text>
               </View>
               <FontAwesome name="chevron-right" size={16} color={Theme.colors.text.tertiary} />
-            </View>
+            </TouchableOpacity>
           </Card>
         </View>
 
@@ -180,8 +248,8 @@ export default function Profile() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Health & Preferences</Text>
           <Card style={styles.card} padding="none" variant="elevated">
-            <TouchableOpacity 
-              style={styles.cardRow} 
+            <TouchableOpacity
+              style={styles.cardRow}
               activeOpacity={0.7}
               onPress={() => router.push("/(tabs)/AllergiesPreferences")}
             >
@@ -191,18 +259,18 @@ export default function Profile() {
               <View style={styles.cardContent}>
                 <Text style={styles.cardLabel}>Allergies & Intolerances</Text>
                 <Text style={styles.cardSubtext}>
-                  {userPrefs.allergies?.length > 0 
+                  {userPrefs.allergies?.length > 0
                     ? `${userPrefs.allergies.length} ${userPrefs.allergies.length === 1 ? 'allergy' : 'allergies'} set`
                     : "Not set"}
                 </Text>
               </View>
               <FontAwesome name="chevron-right" size={16} color={Theme.colors.text.tertiary} />
             </TouchableOpacity>
-            
+
             <View style={styles.cardDivider} />
-            
-            <TouchableOpacity 
-              style={styles.cardRow} 
+
+            <TouchableOpacity
+              style={styles.cardRow}
               activeOpacity={0.7}
               onPress={() => router.push("/(tabs)/AllergiesPreferences")}
             >
@@ -212,7 +280,7 @@ export default function Profile() {
               <View style={styles.cardContent}>
                 <Text style={styles.cardLabel}>Dietary Preferences</Text>
                 <Text style={styles.cardSubtext}>
-                  {userPrefs.dietaryPreferences?.length > 0 
+                  {userPrefs.dietaryPreferences?.length > 0
                     ? `${userPrefs.dietaryPreferences.length} ${userPrefs.dietaryPreferences.length === 1 ? 'preference' : 'preferences'} set`
                     : "Not set"}
                 </Text>
@@ -226,19 +294,19 @@ export default function Profile() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Security & Sync</Text>
           <Card style={styles.card} padding="none" variant="elevated">
-            <TouchableOpacity style={styles.cardRow} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.cardRow} activeOpacity={0.7} onPress={() => setPasswordModalVisible(true)}>
               <View style={[styles.cardIconContainer, { backgroundColor: `${Theme.colors.primary.main}15` }]}>
                 <FontAwesome name="lock" size={18} color={Theme.colors.primary.main} />
               </View>
               <View style={styles.cardContent}>
                 <Text style={styles.cardLabel}>Account Security</Text>
-                <Text style={styles.cardSubtext}>Password protected</Text>
+                <Text style={styles.cardSubtext}>Change password</Text>
               </View>
               <FontAwesome name="chevron-right" size={16} color={Theme.colors.text.tertiary} />
             </TouchableOpacity>
-            
+
             <View style={styles.cardDivider} />
-            
+
             <View style={styles.cardRow}>
               <View style={[styles.cardIconContainer, { backgroundColor: `${Theme.colors.accent.orange}20` }]}>
                 <FontAwesome name="cloud" size={18} color={Theme.colors.accent.orange} />
@@ -278,8 +346,8 @@ export default function Profile() {
         />
 
         {/* Contact Support Link */}
-        <TouchableOpacity 
-          style={styles.supportLink} 
+        <TouchableOpacity
+          style={styles.supportLink}
           onPress={handleContactSupport}
           activeOpacity={0.7}
         >
@@ -287,6 +355,43 @@ export default function Profile() {
           <Text style={styles.supportLinkText}>Contact Support</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal visible={emailModalVisible} transparent animationType="slide" onRequestClose={() => setEmailModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Update Email</Text>
+            <TextInput style={styles.modalInput} placeholder="New email address" placeholderTextColor="#9CA3AF" value={newEmail} onChangeText={setNewEmail} autoCapitalize="none" keyboardType="email-address" />
+            <TextInput style={styles.modalInput} placeholder="Current password" placeholderTextColor="#9CA3AF" value={emailPassword} onChangeText={setEmailPassword} secureTextEntry />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => { setEmailModalVisible(false); setNewEmail(""); setEmailPassword(""); }}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSave} onPress={handleUpdateEmail} disabled={saving}>
+                <Text style={styles.modalSaveText}>{saving ? "Saving..." : "Save"}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={passwordModalVisible} transparent animationType="slide" onRequestClose={() => setPasswordModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Change Password</Text>
+            <TextInput style={styles.modalInput} placeholder="Current password" placeholderTextColor="#9CA3AF" value={currentPassword} onChangeText={setCurrentPassword} secureTextEntry />
+            <TextInput style={styles.modalInput} placeholder="New password (min 8 chars)" placeholderTextColor="#9CA3AF" value={newPassword} onChangeText={setNewPassword} secureTextEntry />
+            <TextInput style={styles.modalInput} placeholder="Confirm new password" placeholderTextColor="#9CA3AF" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => { setPasswordModalVisible(false); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); }}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSave} onPress={handleUpdatePassword} disabled={saving}>
+                <Text style={styles.modalSaveText}>{saving ? "Saving..." : "Save"}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -479,4 +584,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Theme.colors.primary.main,
   },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", paddingHorizontal: Theme.spacing.lg,},
+  modalContent: { backgroundColor: Theme.colors.background.primary, borderRadius: Theme.radius.xl, padding: Theme.spacing['2xl'],},
+  modalTitle: { ...Theme.typography.sectionTitle, color: Theme.colors.text.primary, marginBottom: Theme.spacing.xl,},
+  modalInput: { borderWidth: 1, borderColor: Theme.colors.border.light, borderRadius: Theme.radius.md, padding: Theme.spacing.lg, fontSize: 16, color: '#111827', marginBottom: Theme.spacing.md,},
+  modalButtons: { flexDirection: "row", gap: Theme.spacing.md, marginTop: Theme.spacing.sm,},
+  modalCancel: { flex: 1, padding: Theme.spacing.lg, borderRadius: Theme.radius.md, borderWidth: 1, borderColor: Theme.colors.border.light, alignItems: "center",},
+  modalCancelText: { ...Theme.typography.body, fontWeight: '600', color: Theme.colors.text.secondary,},
+  modalSave: { flex: 1, padding: Theme.spacing.lg, borderRadius: Theme.radius.md, backgroundColor: Theme.colors.primary.main, alignItems: "center",},
+  modalSaveText: { ...Theme.typography.body, fontWeight: '600', color: "#FFFFFF",},
 });
