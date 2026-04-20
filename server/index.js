@@ -504,9 +504,19 @@ app.get("/foods", async (req, res) => {
       const list = Array.isArray(payload.foods) ? payload.foods : [];
 
       const dataTypePriority = { "Foundation": 0, "SR Legacy": 1, "Survey (FNDDS)": 2, "Branded": 3 };
-      const sorted = [...list].sort((a, b) =>
-        (dataTypePriority[a.dataType] ?? 4) - (dataTypePriority[b.dataType] ?? 4)
-      );
+      const qLower = q.toLowerCase();
+      const qWords = qLower.split(/\s+/).filter(w => w.length > 2);
+
+      const scoreMatch = (f) => {
+        const text = [f.description, f.brandOwner, f.brandName].filter(Boolean).join(" ").toLowerCase();
+        return qWords.filter(w => text.includes(w)).length;
+      };
+
+      const sorted = [...list].sort((a, b) => {
+        const scoreDiff = scoreMatch(b) - scoreMatch(a);
+        if (scoreDiff !== 0) return scoreDiff;
+        return (dataTypePriority[a.dataType] ?? 4) - (dataTypePriority[b.dataType] ?? 4);
+      });
 
       const candidates = sorted
         .map((f) => {
