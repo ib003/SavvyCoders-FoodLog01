@@ -129,7 +129,7 @@ export default function AddMealTab() {
             iconBg={`${Theme.colors.text.secondary}15`}
             title="Manual Entry"
             description="Create a custom meal entry manually"
-            to="/search"
+            to="/manual"
           />
         </View>
 
