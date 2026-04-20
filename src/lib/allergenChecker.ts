@@ -7,10 +7,27 @@ import { preferences, UserPreferences } from "./preferences";
  * @returns Array of matching allergens found in the food
  */
 const ALLERGEN_ALIASES: Record<string, string[]> = {
-  lactose: ["lactose", "milk", "cheese", "cream", "butter", "yogurt", "whey", "casein", "dairy"],
-  dairy: ["dairy", "milk", "cheese", "cream", "butter", "yogurt", "whey", "casein"],
-  gluten: ["gluten", "wheat", "barley", "rye", "flour", "bread", "pasta"],
-  peanut: ["peanut", "peanut butter", "groundnut"],
+  peanut:    ["peanut", "peanuts", "peanut butter", "groundnut"],
+  "tree nut": ["tree nut", "tree nuts", "almond", "cashew", "walnut", "pecan", "pistachio", "hazelnut", "macadamia", "brazil nut"],
+  dairy:     ["dairy", "milk", "cheese", "cream", "butter", "yogurt", "whey", "casein", "lactose"],
+  lactose:   ["lactose", "milk", "cheese", "cream", "butter", "yogurt", "whey", "casein", "dairy"],
+  egg:       ["egg", "eggs", "albumin", "mayonnaise", "mayo"],
+  gluten:    ["gluten", "wheat", "barley", "rye", "flour", "bread", "pasta"],
+  soy:       ["soy", "soya", "soybean", "tofu", "edamame", "miso", "tempeh"],
+  fish:      ["fish", "cod", "salmon", "tuna", "tilapia", "halibut", "bass", "flounder", "anchovy"],
+  shellfish: ["shellfish", "shrimp", "crab", "lobster", "clam", "oyster", "scallop", "mussel"],
+  sesame:    ["sesame", "tahini", "sesame oil", "sesame seed"],
+  sulfite:   ["sulfite", "sulfites", "sulphite", "sulphites", "sulfur dioxide"],
+};
+
+const findAliases = (allergy: string): string[] => {
+  const exact = ALLERGEN_ALIASES[allergy];
+  if (exact) return exact;
+  // fuzzy: find a key that the allergy starts with or vice versa (handles plurals, e.g. "peanuts" → "peanut")
+  const fuzzyKey = Object.keys(ALLERGEN_ALIASES).find(
+    (key) => allergy.startsWith(key) || key.startsWith(allergy)
+  );
+  return fuzzyKey ? ALLERGEN_ALIASES[fuzzyKey] : [allergy];
 };
 export async function checkAllergens(
   foodTags: string[],
@@ -30,7 +47,7 @@ export async function checkAllergens(
   const matches: string[] = [];
 
 normalizedAllergies.forEach((allergy, index) => {
-  const relatedTerms = ALLERGEN_ALIASES[allergy] || [allergy];
+  const relatedTerms = findAliases(allergy);
 
   const matched = normalizedFoodTags.some((foodTag) =>
     relatedTerms.some(
