@@ -8,7 +8,7 @@ import { TextField } from "@/components/ui/TextField";
 import { Theme } from "@/constants/Theme";
 import { API_BASE } from "@/src/constants/api";
 import { auth } from "@/src/lib/auth";
-import { signInWithGoogle } from "@/src/lib/oauth";
+import { signInWithApple } from "@/src/lib/oauth";
 import { useFadeIn, useScaleIn, useSlideInY } from "@/src/ui/animations";
 import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -138,14 +138,14 @@ export default function Login() {
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleAppleLogin = async () => {
     setLoading(true);
     try {
-      const result = await signInWithGoogle();
+      const result = await signInWithApple();
       if (result.success && result.token) {
         setTimeout(() => router.replace("/(tabs)/Dashboard"), 100);
       } else {
-        Alert.alert("Sign In Failed", result.error || "Google sign-in failed. Please try again.");
+        Alert.alert("Sign In Failed", result.error || "Apple sign-in failed. Please try again.");
       }
     } catch (error: any) {
       Alert.alert("Sign In Failed", error.message || "Please try again.");
@@ -253,15 +253,17 @@ export default function Login() {
 
               <Divider text="OR" />
 
-              <Animated.View style={{ opacity: button2Opacity }}>
-                <SecondaryButton
-                  title="Continue with Google"
-                  onPress={handleGoogleLogin}
-                  disabled={loading}
-                  icon={<FontAwesome name="google" size={18} color={Theme.colors.text.primary} />}
-                  style={styles.oauthButton}
-                />
-              </Animated.View>
+              {Platform.OS === "ios" && (
+                <Animated.View style={{ opacity: button2Opacity }}>
+                  <SecondaryButton
+                    title="Continue with Apple"
+                    onPress={handleAppleLogin}
+                    disabled={loading}
+                    icon={<FontAwesome name="apple" size={18} color={Theme.colors.text.primary} />}
+                    style={styles.oauthButton}
+                  />
+                </Animated.View>
+              )}
 
               <View style={styles.footer}>
                 <Text style={styles.footerText}>Don't have an account? </Text>

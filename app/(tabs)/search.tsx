@@ -262,8 +262,8 @@ export default function AddSearch() {
       ...getFoodIngredients(food).map((i) => String(i).toLowerCase()),
       ...getFoodAllergens(food).map((a) => String(a).toLowerCase()),
     ];
-
-    const analysis = await analyzeFood(foodTags);
+    const macros = { kcal: getFoodKcal(food), protein: getFoodProtein(food), carbs: getFoodCarbs(food), fat: getFoodFat(food) };
+    const analysis = await analyzeFood(foodTags, undefined, macros);
     setAllergenAnalysis(analysis);
     setQuantityModalVisible(true);
   };
@@ -399,7 +399,13 @@ export default function AddSearch() {
         throw new Error(text || "Failed to save meal");
       }
 
-      const mealAnalysis: any = await analyzeFood(getMealAnalysisTags(mealItems));
+      const mealMacros = {
+        kcal: mealItems.reduce((s, i) => s + getFoodKcalForQty(i.food, i.qty), 0),
+        protein: mealItems.reduce((s, i) => s + getFoodProtein(i.food) * i.qty, 0),
+        carbs: mealItems.reduce((s, i) => s + getFoodCarbs(i.food) * i.qty, 0),
+        fat: mealItems.reduce((s, i) => s + getFoodFat(i.food) * i.qty, 0),
+      };
+      const mealAnalysis: any = await analyzeFood(getMealAnalysisTags(mealItems), undefined, mealMacros);
       const warningMessages = extractAnalysisMessages(mealAnalysis);
 
       if (

@@ -9,7 +9,7 @@ import { Theme } from "@/constants/Theme";
 import { FontAwesome } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -48,6 +48,7 @@ export default function AddBarcode() {
   const [allergenAnalysis, setAllergenAnalysis] = useState<any>(null);
   const [isSafe, setIsSafe] = useState<boolean | null>(null);
   const [mealType, setMealType] = useState<MealTypeValue>("snack");
+  const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!permission) {
@@ -58,6 +59,7 @@ export default function AddBarcode() {
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     if (scanned || scanning) return;
     
+    if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
     setScanning(true);
     setScanned(true);
     setLoading(true);
@@ -81,12 +83,18 @@ export default function AddBarcode() {
       const foodData: Food = await response.json();
       setFood(foodData);
 
-      // Check for allergens
+      // Check for allergens and dietary preferences
       const foodTags = [foodData.name.toLowerCase()];
       if (foodData.brand) {
         foodTags.push(foodData.brand.toLowerCase());
       }
-      const analysis = await analyzeFood(foodTags);
+      const macros = {
+        kcal: foodData.kcal ?? 0,
+        protein: foodData.macros?.protein ?? 0,
+        carbs: foodData.macros?.carbs ?? 0,
+        fat: foodData.macros?.fat ?? 0,
+      };
+      const analysis = await analyzeFood(foodTags, undefined, macros);
       setAllergenAnalysis(analysis);
       
       // Determine if safe
@@ -152,6 +160,7 @@ const response = await fetch(url, {
       {
         food_id: food.id,
         qty: parseFloat(quantity) || 1,
+        kcal: Math.round((food.kcal ?? 0) * (parseFloat(quantity) || 1)),
       },
     ],
   }),
@@ -219,17 +228,18 @@ const response = await fetch(url, {
     setManualScan(true);
     setError(null);
     // disable after 8s and notify if nothing found
-    setTimeout(() => {
-      if (!scanned) {
-        setManualScan(false);
-        setError("No barcode detected");
-        Alert.alert(
-          "No barcode detected",
-          "We couldn't find a barcode. Try moving the camera closer and try again."
-        );
-      } else {
-        setManualScan(false);
-      }
+    scanTimeoutRef.current = setTimeout(() => {
+      setManualScan(false);
+      setScanned(prev => {
+        if (!prev) {
+          setError("No barcode detected");
+          Alert.alert(
+            "No barcode detected",
+            "We couldn't find a barcode. Try moving the camera closer and try again."
+          );
+        }
+        return prev;
+      });
     }, 8000);
   };
 

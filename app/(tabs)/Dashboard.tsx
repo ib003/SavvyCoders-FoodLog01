@@ -185,7 +185,7 @@ export default function DashboardScreen() {
         const carbs = Number(item.carbs_g ?? 0);
         const fat = Number(item.fat_g ?? 0);
 
-        acc.calories += Number.isFinite(kcal) ? kcal * qty : 0;
+        acc.calories += Number.isFinite(kcal) ? kcal : 0;
         acc.protein += Number.isFinite(protein) ? protein * qty : 0;
         acc.carbs += Number.isFinite(carbs) ? carbs * qty : 0;
         acc.fat += Number.isFinite(fat) ? fat * qty : 0;
@@ -216,7 +216,16 @@ export default function DashboardScreen() {
 
     for (const meal of meals) {
       const foodNames = meal.items.map(item => item.food.name);
-      const analysis = await analyzeFood(foodNames, userPrefs);
+      const macros = meal.items.reduce((acc, item) => {
+        const qty = Number(item.qty ?? 1);
+        return {
+          kcal: acc.kcal + Number(item.kcal ?? item.food.kcal ?? 0),
+          protein: acc.protein + Number(item.protein_g ?? 0) * qty,
+          carbs: acc.carbs + Number(item.carbs_g ?? 0) * qty,
+          fat: acc.fat + Number(item.fat_g ?? 0) * qty,
+        };
+      }, { kcal: 0, protein: 0, carbs: 0, fat: 0 });
+      const analysis = await analyzeFood(foodNames, userPrefs, macros);
       
       if (analysis.hasAllergenWarning || analysis.hasDietaryConflict) {
         alertsList.push({
@@ -282,7 +291,7 @@ export default function DashboardScreen() {
                     const carbs = Number(item.carbs_g ?? 0);
                     const fat = Number(item.fat_g ?? 0);
 
-                    acc.calories += Number.isFinite(kcal) ? kcal * qty : 0;
+                    acc.calories += Number.isFinite(kcal) ? kcal : 0;
                     acc.protein += Number.isFinite(protein) ? protein * qty : 0;
                     acc.carbs += Number.isFinite(carbs) ? carbs * qty : 0;
                     acc.fat += Number.isFinite(fat) ? fat * qty : 0;

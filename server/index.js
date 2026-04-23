@@ -679,6 +679,9 @@ app.get("/barcode/:upc", async (req, res) => {
         servingSize: null,
         servingUnit: servingSizeRaw,
         calories: calories,
+        protein: Number.isFinite(Number(protein)) ? Number(protein) : null,
+        carbs: Number.isFinite(Number(carbs)) ? Number(carbs) : null,
+        fat: Number.isFinite(Number(fat)) ? Number(fat) : null,
         barcode: upc,
         imageUrl: p.image_front_small_url || p.image_url || null,
         source: 'UPC_API',
@@ -911,7 +914,7 @@ app.get("/meals", auth, async (req, res) => {
       qty,
       food: toFoodResponse(item.food),
       totals: {
-        kcal: calories * qty,
+        kcal: calories,
         protein: protein * qty,
         carbs: carbs * qty,
         fat: fat * qty,
@@ -1114,18 +1117,8 @@ app.post("/api/analyze-food", async (req, res) => {
 // --- User Preferences ---
 app.get("/user/preferences", auth, async (req, res) => {
   try {
-    // Get user allergies from UserAllergy relation
-    const userAllergies = await prisma.userAllergy.findMany({
-      where: { userId: req.userId },
-      include: { allergy: true }
-    });
-    
-    // For now, return empty arrays - preferences are stored differently in this schema
-    // You may need to adjust this based on your actual preference storage
-    res.json({ 
-      allergies: userAllergies.map(ua => ua.allergy.name) || [], 
-      dietaryPreferences: [] 
-    });
+    const prefs = await prisma.userPreferences.findUnique({ where: { userId: req.userId } });
+    res.json({ allergies: prefs?.allergies || [], dietaryPreferences: prefs?.dietaryPreferences || [] });
   } catch (error) {
     console.error("Get preferences error:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -1135,41 +1128,14 @@ app.get("/user/preferences", auth, async (req, res) => {
 app.put("/user/preferences", auth, async (req, res) => {
   try {
     const { allergies, dietaryPreferences } = req.body;
-    if (!Array.isArray(allergies)) {
-      return res.status(400).json({ error: "allergies must be an array" });
-    }
-    
-    // Note: This is a simplified version. You may need to map allergies to Allergy IDs
-    // For now, just return what was sent
-    const cleanAllergies = allergies.map(a => String(a).trim()).filter(a => a.length > 0);
-    
-    const allergyIds = [];
-    for (const name of cleanAllergies) {
-      let allergy = await prisma.allergy.findFirst({
-        where: { name: name }
-      });
-      if (!allergy) {
-        allergy = await prisma.allergy.create({
-          data: { name: name }
-        });
-      }
-      allergyIds.push(allergy.id);
-    }
-    
-    await prisma.userAllergy.deleteMany({
-      where: { userId: req.userId }
+    const cleanAllergies = (Array.isArray(allergies) ? allergies : []).map(a => String(a).trim()).filter(Boolean);
+    const cleanPrefs = (Array.isArray(dietaryPreferences) ? dietaryPreferences : []).map(p => String(p).trim()).filter(Boolean);
+    await prisma.userPreferences.upsert({
+      where: { userId: req.userId },
+      update: { allergies: cleanAllergies, dietaryPreferences: cleanPrefs },
+      create: { id: req.userId, userId: req.userId, allergies: cleanAllergies, dietaryPreferences: cleanPrefs },
     });
-    
-    if (allergyIds.length) {
-      await prisma.userAllergy.createMany({
-        data: allergyIds.map((id) => ({
-          userId: req.userId,
-          allergyId: id
-        }))
-      });
-    }
-    
-    res.json({ allergies: cleanAllergies, dietaryPreferences: dietaryPreferences || [] });
+    res.json({ allergies: cleanAllergies, dietaryPreferences: cleanPrefs });
   } catch (error) {
     console.error("Update preferences error:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -1383,6 +1349,39 @@ app.delete("/saved-foods/:id", auth, async (req, res) => {
     res.status(500).json({ error: "failed_to_delete_saved_food" });
   }
 });
+app.get("/saved-meals", auth, async (req, res) => {
+  try {
+    const meals = await prisma.savedMeal.findMany({ where: { userId: req.userId }, orderBy: { createdAt: "desc" } });
+    res.json(meals);
+  } catch (e) {
+    res.status(500).json({ error: "failed_to_load_saved_meals" });
+  }
+});
+
+app.post("/saved-meals", auth, async (req, res) => {
+  try {
+    const { name, items } = req.body;
+    if (!name || !Array.isArray(items)) return res.status(400).json({ error: "name and items required" });
+    const meal = await prisma.savedMeal.create({ data: { userId: req.userId, name, items } });
+    res.json(meal);
+  } catch (e) {
+    res.status(500).json({ error: "failed_to_save_meal_template", message: e.message });
+  }
+});
+
+app.delete("/saved-meals/:id", auth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
+    const row = await prisma.savedMeal.findFirst({ where: { id, userId: req.userId }, select: { id: true } });
+    if (!row) return res.status(404).json({ error: "not_found" });
+    await prisma.savedMeal.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: "failed_to_delete_saved_meal" });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`API running on http://0.0.0.0:${PORT}`);

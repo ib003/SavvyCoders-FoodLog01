@@ -2,15 +2,17 @@ import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from "@/compo
 import { auth } from "@/src/lib/auth";
 import { symptoms } from "@/src/lib/symptoms";
 import { Colors } from "@/constants/Colors";
+import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function Symptom() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [physicalSymptoms, setPhysicalSymptoms] = useState<string[]>([]);
   const [mentalSymptoms, setMentalSymptoms] = useState<string[]>([]);
-  const [whenStarted, setWhenStarted] = useState("");
   const [severity, setSeverity] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
@@ -77,7 +79,7 @@ export default function Symptom() {
           { text: "Cancel", style: "cancel" },
           { text: "Continue", onPress: async () => {
             const severityLevel = severity ? getSeverityLevel() : "mild";
-            const notes = whenStarted ? `Started: ${whenStarted}` : undefined;
+            const notes = undefined;
             
             for (const symptomName of newSymptoms) {
               await symptoms.addSymptom(symptomName, severityLevel, notes);
@@ -90,7 +92,7 @@ export default function Symptom() {
       }
       
       const severityLevel = severity ? getSeverityLevel() : "mild";
-      const notes = whenStarted ? `Started: ${whenStarted}` : undefined;
+      const notes = undefined;
       
       for (const symptomName of newSymptoms) {
         await symptoms.addSymptom(symptomName, severityLevel, notes);
@@ -143,13 +145,16 @@ export default function Symptom() {
   }
 
   return (
-    <ScrollView style={styles.bg} contentContainerStyle={styles.page}>
-      <Text style={styles.h1}>Symptom Log</Text>
-
-      <View style={styles.card}>
-        <Text style={styles.h2}>When did symptoms start?</Text>
-        <TextInput style={styles.input} placeholder="e.g., 2 hours after lunch" placeholderTextColor={Colors.neutral.mutedGray} value={whenStarted} onChangeText={setWhenStarted} inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID} />
+    <View style={styles.bg}>
+      <View style={[styles.topSafeArea, { height: insets.top }]} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <FontAwesome name="arrow-left" size={18} color={Colors.neutral.textDark} />
+        </TouchableOpacity>
+        <Text style={styles.h1}>Symptom Log</Text>
+        <View style={styles.backButton} />
       </View>
+    <ScrollView contentContainerStyle={styles.page}>
 
       <View style={styles.card}>
         <Text style={styles.h2}>How severe? (1-10)</Text>
@@ -207,13 +212,17 @@ export default function Symptom() {
       )}
       <KeyboardDismissAccessory />
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bg: { backgroundColor: Colors.neutral.backgroundLight },
+  bg: { flex: 1, backgroundColor: Colors.neutral.backgroundLight },
+  topSafeArea: { backgroundColor: "#000000" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: Colors.neutral.cardSurface, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
+  backButton: { width: 36, alignItems: "center" },
   page: { padding: 16, gap: 16 },
-  h1: { fontSize: 28, fontWeight: "800", color: Colors.neutral.textDark },
+  h1: { fontSize: 22, fontWeight: "800", color: Colors.neutral.textDark },
   h2: { fontSize: 16, fontWeight: "700", marginBottom: 8, color: Colors.neutral.textDark },
   hint: { fontSize: 12, color: Colors.neutral.mutedGray, marginBottom: 8 },
   card: { backgroundColor: Colors.neutral.cardSurface, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: "#EDEDED" },

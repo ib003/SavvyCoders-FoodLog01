@@ -1,5 +1,5 @@
 import { auth } from "@/src/lib/auth";
-import { signInWithGoogle, signInWithApple } from "@/src/lib/oauth";
+import { signInWithApple } from "@/src/lib/oauth";
 import { useFadeIn, useScaleIn, useSlideInY } from "@/src/ui/animations";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -138,13 +138,11 @@ export default function Register() {
     }
   };
 
-  const handleOAuth = async (provider: "google" | "apple") => {
+  const handleOAuth = async () => {
     setLoading(true);
     try {
-      const result = provider === "google" 
-        ? await signInWithGoogle()
-        : await signInWithApple();
-      
+      const result = await signInWithApple();
+
       if (result.success && result.token) {
         Alert.alert(
           "Success!",
@@ -162,14 +160,14 @@ export default function Register() {
       } else {
         Alert.alert(
           "Sign In Failed",
-          result.error || `${provider === "google" ? "Google" : "Apple"} sign-in failed. Please try again.`
+          result.error || "Apple sign-in failed. Please try again."
         );
       }
     } catch (error: any) {
       console.error("OAuth error:", error);
       Alert.alert(
         "Sign In Failed",
-        `Failed to sign in with ${provider === "google" ? "Google" : "Apple"}. Please try again.`
+        "Failed to sign in with Apple. Please try again."
       );
     } finally {
       setLoading(false);
@@ -303,21 +301,11 @@ export default function Register() {
 
               <Divider text="OR" />
 
-              <Animated.View style={{ opacity: button2Opacity }}>
-                <SecondaryButton
-                  title="Continue with Google"
-                  onPress={() => handleOAuth("google")}
-                  disabled={loading}
-                  icon={<FontAwesome name="google" size={18} color={Theme.colors.text.primary} />}
-                  style={styles.oauthButton}
-                />
-              </Animated.View>
-
               {Platform.OS === "ios" && (
                 <Animated.View style={{ opacity: button3Opacity }}>
                   <SecondaryButton
                     title="Continue with Apple"
-                    onPress={() => handleOAuth("apple")}
+                    onPress={handleOAuth}
                     disabled={loading}
                     icon={<FontAwesome name="apple" size={18} color={Theme.colors.text.primary} />}
                     style={styles.oauthButton}

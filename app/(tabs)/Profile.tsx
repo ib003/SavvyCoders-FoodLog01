@@ -7,13 +7,12 @@ import { UserPreferences, preferences } from "@/src/lib/preferences";
 import { FontAwesome } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, usePathname, useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Linking, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 export default function Profile() {
   const router = useRouter();
-  const pathname = usePathname();
   const [email, setEmail] = useState<string | null>(null);
   const [userPrefs, setUserPrefs] = useState<UserPreferences>({ allergies: [], dietaryPreferences: [] });
   const [emailModalVisible, setEmailModalVisible] = useState(false);
@@ -25,7 +24,6 @@ export default function Profile() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const isInitialMount = useRef(true);
-  const previousPath = useRef(pathname);
 
   useEffect(() => {
     const checkAuthAndLoad = async () => {
@@ -42,27 +40,13 @@ export default function Profile() {
     isInitialMount.current = false;
   }, []);
 
-  // Track pathname changes to detect modal navigation
-  useEffect(() => {
-    previousPath.current = pathname;
-  }, [pathname]);
-
   useFocusEffect(
     useCallback(() => {
-      // Skip reload if this is the initial mount
       if (isInitialMount.current) {
         return;
       }
-
-      // Skip reload if we're coming back from a modal route
-      const currentPath = pathname;
-      const isComingFromModal = currentPath === previousPath.current;
-
-      if (!isComingFromModal) {
-        // Only reload when switching tabs, not when closing modals
-        loadPreferences();
-      }
-    }, [pathname])
+      loadPreferences();
+    }, [])
   );
 
   const loadUserData = async () => {
@@ -184,13 +168,13 @@ export default function Profile() {
   };
 
   const handleContactSupport = () => {
-    const email = "mocksupport@foodlogapp.com";
+    const email = "SavvyTrackSupport@gmail.com";
     const subject = "App Support Request";
     const body = "Hello,\n\nI need help with:\n\n";
     const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
     Linking.openURL(mailtoUrl).catch(() => {
-      Alert.alert("Error", "Unable to open email client. Please contact us at mocksupport@foodlogapp.com");
+      Alert.alert("Error", "Unable to open email client. Please contact us at SavvyTrackSupport@gmail.com");
     });
   };
 

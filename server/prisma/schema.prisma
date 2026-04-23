@@ -28,7 +28,8 @@ model User {
   meals              Meal[]
   symptomLogs        SymptomLog[]
   allergies          UserAllergy[]
-   savedFoods         SavedFood[]  
+   savedFoods         SavedFood[]
+  savedMeals         SavedMeal[]
   UserPreferences    UserPreferences?
   verificationTokens VerificationToken[]
 }
@@ -205,4 +206,16 @@ model SavedFood {
   @@unique([userId, foodId], name: "userId_foodId")
   @@index([userId])
   @@index([foodId])
+}
+
+model SavedMeal {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  name      String
+  items     Json     @default("[]")
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

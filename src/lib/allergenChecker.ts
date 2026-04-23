@@ -29,12 +29,20 @@ const findAliases = (allergy: string): string[] => {
   );
   return fuzzyKey ? ALLERGEN_ALIASES[fuzzyKey] : [allergy];
 };
+
+export interface FoodMacros {
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
 export async function checkAllergens(
   foodTags: string[],
   userAllergies?: string[]
 ): Promise<string[]> {
   const allergies = userAllergies || (await preferences.fetch()).allergies;
-  
+
   if (!allergies || allergies.length === 0) {
     return [];
   }
@@ -71,12 +79,19 @@ normalizedAllergies.forEach((allergy, index) => {
  * @param userPreferences - User's dietary preferences (optional, will fetch if not provided)
  * @returns Object with match status and matching preferences
  */
+const CONFLICT_KEYWORDS: Record<string, string[]> = {
+  "vegetarian": ["beef", "chicken", "pork", "turkey", "lamb", "veal", "bacon", "ham", "sausage", "salami", "pepperoni", "prosciutto", "venison", "bison", "duck", "goose", "rabbit", "anchovy", "sardine", "tuna", "salmon", "tilapia", "cod", "lard", "gelatin", "meat", "fish", "shellfish", "shrimp", "crab", "lobster"],
+  "dairy-free": ["milk", "cheese", "butter", "cream", "yogurt", "whey", "casein", "lactose", "dairy"],
+  "paleo": ["bread", "pasta", "rice", "oat", "oats", "cereal", "flour", "corn", "noodle", "couscous", "bagel", "tortilla", "cracker", "bean", "beans", "lentil", "pea", "peanut", "soy", "tofu", "chickpea", "hummus", "milk", "cheese", "butter", "cream", "yogurt", "dairy", "candy", "cookie", "cake", "syrup"],
+};
+
 export async function checkDietaryPreferences(
   foodTags: string[],
-  userPreferences?: string[]
+  userPreferences?: string[],
+  macros?: FoodMacros
 ): Promise<{ matches: string[]; conflicts: string[] }> {
   const dietaryPrefs = userPreferences || (await preferences.fetch()).dietaryPreferences;
-  
+
   if (!dietaryPrefs || dietaryPrefs.length === 0) {
     return { matches: [], conflicts: [] };
   }
@@ -99,18 +114,9 @@ export async function checkDietaryPreferences(
 
   // Check for conflicts (e.g., user is Vegan but food contains Dairy)
   // This is a simplified check - you might want more sophisticated logic
-  const conflictKeywords: Record<string, string[]> = {
-    "vegan": ["dairy", "eggs", "meat", "fish", "shellfish", "honey"],
-    "vegetarian": ["meat", "fish", "shellfish"],
-    "halal": ["pork", "alcohol"],
-    "kosher": ["pork", "shellfish"],
-    "gluten-free": ["gluten", "wheat"],
-    "dairy-free": ["dairy", "lactose", "milk", "cheese"],
-  };
-
   dietaryPrefs.forEach(pref => {
     const prefLower = pref.toLowerCase().trim();
-    const conflictList = conflictKeywords[prefLower];
+    const conflictList = CONFLICT_KEYWORDS[prefLower];
     if (conflictList) {
       conflictList.forEach(conflict => {
         if (normalizedFoodTags.some(foodTag => foodTag.includes(conflict))) {
@@ -125,6 +131,24 @@ export async function checkDietaryPreferences(
     }
   });
 
+  if (macros && macros.kcal > 0) {
+    const carbPct = (macros.carbs * 4) / macros.kcal;
+    const fatPct = (macros.fat * 9) / macros.kcal;
+
+    if (dietaryPrefs.some(p => p.toLowerCase() === "keto") && carbPct > 0.10) {
+      const pref = dietaryPrefs.find(p => p.toLowerCase() === "keto")!;
+      if (!conflicts.includes(pref)) conflicts.push(pref);
+    }
+    if (dietaryPrefs.some(p => p.toLowerCase() === "low-carb") && carbPct > 0.10) {
+      const pref = dietaryPrefs.find(p => p.toLowerCase() === "low-carb")!;
+      if (!conflicts.includes(pref)) conflicts.push(pref);
+    }
+    if (dietaryPrefs.some(p => p.toLowerCase() === "low-fat") && fatPct > 0.30) {
+      const pref = dietaryPrefs.find(p => p.toLowerCase() === "low-fat")!;
+      if (!conflicts.includes(pref)) conflicts.push(pref);
+    }
+  }
+
   return { matches, conflicts };
 }
 
@@ -136,7 +160,8 @@ export async function checkDietaryPreferences(
  */
 export async function analyzeFood(
   foodTags: string[],
-  userPrefs?: UserPreferences
+  userPrefs?: UserPreferences,
+  macros?: FoodMacros
 ): Promise<{
   hasAllergenWarning: boolean;
   allergenMatches: string[];
@@ -146,9 +171,9 @@ export async function analyzeFood(
   warnings: string[];
 }> {
   const prefs = userPrefs || await preferences.fetch();
-  
+
   const allergenMatches = await checkAllergens(foodTags, prefs.allergies);
-  const dietary = await checkDietaryPreferences(foodTags, prefs.dietaryPreferences);
+  const dietary = await checkDietaryPreferences(foodTags, prefs.dietaryPreferences, macros);
 
   const warnings: string[] = [];
 
@@ -173,4 +198,3 @@ export async function analyzeFood(
     warnings,
   };
 }
-

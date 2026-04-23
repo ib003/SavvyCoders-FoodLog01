@@ -26,15 +26,10 @@ export const COMMON_ALLERGENS = [
 
 // Common dietary preferences/tags
 export const COMMON_DIETARY_PREFERENCES = [
-  "Vegan",
   "Vegetarian",
-  "Halal",
-  "Kosher",
+  "Dairy-Free",
   "Paleo",
   "Keto",
-  "Gluten-Free",
-  "Dairy-Free",
-  "Sugar-Free",
   "Low-Carb",
   "Low-Fat",
 ];
