@@ -1,9 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const BASE_URL = "http://192.168.4.35:3000";
+import { API_BASE } from "@/src/constants/api";
+const BASE_URL = API_BASE;
 
-// Add this helper function at the top of the file
-const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 3000): Promise<Response> => {
+
+// Helper to avoid hanging network requests on slow or cold-starting hosts
+const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 15000): Promise<Response> => {
   // Use Promise.race for better React Native compatibility
   return Promise.race([
     fetch(url, options),
@@ -23,33 +25,11 @@ export interface LoginResponse {
 }
 
 export const auth = {
-  // Quick server connectivity check
-  async checkServerConnection(): Promise<boolean> {
-    try {
-      // Quick 2-second check using Promise.race
-      const response = await Promise.race([
-        fetch(`${BASE_URL}/foods?q=test`, { method: "GET" }),
-        new Promise<Response>((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout")), 2000)
-        ),
-      ]);
-      
-      return response.ok || response.status < 500; // Server is reachable
-    } catch (error: any) {
-      return false; // Server not reachable
-    }
-  },
 
   // Login with email and password
   async login(email: string, password: string): Promise<LoginResponse> {
     try {
       console.log("Attempting login to:", `${BASE_URL}/auth/login`);
-      
-      // Quick server check before attempting login
-      const serverAvailable = await this.checkServerConnection();
-      if (!serverAvailable) {
-        throw new Error("Cannot connect to server. Please check:\n1. Server is running\n2. Correct IP address\n3. Same network");
-      }
       
       const response = await fetchWithTimeout(
         `${BASE_URL}/auth/login`,
@@ -61,7 +41,7 @@ export const auth = {
           },
           body: JSON.stringify({ email: email.trim(), password }),
         },
-        3000 // 3 second timeout for faster failure
+        15000 // 15 second timeout for hosted backend cold starts
       );
 
       console.log("Login response status:", response.status);
@@ -106,7 +86,7 @@ export const auth = {
         error.message.includes("timeout") ||
         error.message.includes("not responding")
       ) {
-        throw new Error("Cannot connect to server. Please check:\n1. Server is running\n2. Correct IP address\n3. Same network");
+        throw new Error("Cannot connect to the server right now. Please try again in a few seconds.");
       }
       
       throw new Error(error.message || "Login failed. Please try again.");
@@ -118,12 +98,6 @@ export const auth = {
     try {
       console.log("Attempting registration to:", `${BASE_URL}/auth/register`);
       
-      // Quick server check before attempting registration
-      const serverAvailable = await this.checkServerConnection();
-      if (!serverAvailable) {
-        throw new Error("Cannot connect to server. Please check:\n1. Server is running\n2. Correct IP address\n3. Same network");
-      }
-      
       const response = await fetchWithTimeout(
         `${BASE_URL}/auth/register`,
         {
@@ -134,7 +108,7 @@ export const auth = {
           },
           body: JSON.stringify({ email: email.trim(), password }),
         },
-        3000 // 3 second timeout for faster failure
+        15000 // 15 second timeout for hosted backend cold starts
       );
 
       console.log("Register response status:", response.status);
@@ -191,7 +165,7 @@ export const auth = {
         error.message.includes("timeout") ||
         error.message.includes("not responding")
       ) {
-        throw new Error("Cannot connect to server. Please check:\n1. Server is running\n2. Correct IP address\n3. Same network");
+        throw new Error("Cannot connect to the server right now. Please try again in a few seconds.");
       }
       
       throw new Error(error.message || "Registration failed. Please try again.");
@@ -231,7 +205,7 @@ export const auth = {
   // Check if user is authenticated
   async isAuthenticated() {
     // Development mode flag - allows bypass in dev mode
-    const DEV_MODE = true; // Set to false in production
+    const DEV_MODE = false; // Production mode should require a real token
     
     const token = await this.getToken();
     if (!token) {

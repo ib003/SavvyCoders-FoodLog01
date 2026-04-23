@@ -1,23 +1,31 @@
+import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from "@/components/ui/KeyboardDismissAccessory";
+import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
+import { Colors } from "@/constants/Colors";
+import { Theme } from "@/constants/Theme";
 import { API_BASE } from "@/src/constants/api";
 import { auth } from "@/src/lib/auth";
-import { Colors } from "@/constants/Colors";
+import { MealTypeValue } from "@/src/lib/mealTypes";
 import { FontAwesome } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Keyboard } from "react-native";
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { getSavedFoods, removeSavedFood, SavedFoodRow } from "../../src/_api/savedFoods";
 
 interface Food {
-  id: string;
+  id: number;
   name: string;
   brand?: string;
   servingUnit?: string;
@@ -25,93 +33,125 @@ interface Food {
   kcal?: number;
 }
 
-const SAVED_FOODS_KEY = "saved_foods";
-
 export default function AddSaved() {
   const router = useRouter();
-  const [savedFoods, setSavedFoods] = useState<Food[]>([]);
+  const insets = useSafeAreaInsets();
+  const [savedRows, setSavedRows] = useState<SavedFoodRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFood, setSelectedFood] = useState<Food | null>(null);
+  const [quantity, setQuantity] = useState("1");
+  const [mealType, setMealType] = useState<MealTypeValue>("snack");
+  const [quantityModalVisible, setQuantityModalVisible] = useState(false);
+  const [savingMeal, setSavingMeal] = useState(false);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     loadSavedFoods();
-  }, []);
+  }, []));
 
   const loadSavedFoods = async () => {
     setLoading(true);
     try {
-      // Load from local storage
-      const saved = await AsyncStorage.getItem(SAVED_FOODS_KEY);
-      if (saved) {
-        const foods = JSON.parse(saved);
-        setSavedFoods(foods);
-      } else {
-        // If no saved foods, try to get from recent meals
-        await loadFromRecentMeals();
-      }
+      const rows = await getSavedFoods();
+      setSavedRows(rows);
     } catch (error) {
       console.error("Failed to load saved foods:", error);
+      Alert.alert("Error", "Failed to load saved foods");
     } finally {
       setLoading(false);
     }
   };
 
-  const loadFromRecentMeals = async () => {
+  const handleRemove = async (savedId: number) => {
     try {
-      const token = await auth.getToken();
-      if (!token) return;
-
-      const today = new Date().toISOString().split("T")[0];
-      const response = await fetch(`${API_BASE}/meals?date=${today}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const meals = await response.json();
-        // Extract unique foods from recent meals
-        const foodsMap = new Map<string, Food>();
-        meals.forEach((meal: any) => {
-          meal.items.forEach((item: any) => {
-            if (!foodsMap.has(item.food.id)) {
-              foodsMap.set(item.food.id, item.food);
-            }
-          });
-        });
-        const foods = Array.from(foodsMap.values());
-        setSavedFoods(foods);
-        // Save to local storage
-        await AsyncStorage.setItem(SAVED_FOODS_KEY, JSON.stringify(foods));
-      }
+      await removeSavedFood(savedId);
+      setSavedRows((prev) => prev.filter((r) => r.id !== savedId));
     } catch (error) {
-      console.error("Failed to load from recent meals:", error);
+      Alert.alert("Error", "Failed to remove food");
     }
   };
 
   const handleAddFood = (food: Food) => {
-    Alert.alert(
-      "Add to Meal",
-      `Would you like to add "${food.name}" to your meal?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Add",
-          onPress: () => {
-            // Navigate to search screen with this food pre-selected
-            // For now, just show an alert
-            Alert.alert("Added!", `Adding ${food.name} to meal...`);
-            // TODO: Navigate to meal builder or add directly
-          },
-        },
-      ]
-    );
+    setSelectedFood(food);
+    setQuantity("1");
+    setMealType("snack");
+    setQuantityModalVisible(true);
   };
 
-  const filteredFoods = savedFoods.filter((food) =>
-    food.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (food.brand && food.brand.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const handleBackToAddMeal = () => {
+    router.replace("/(tabs)/AddMeal");
+  };
+
+  const handleSaveMeal = async () => {
+    if (!selectedFood) return;
+
+    try {
+      setSavingMeal(true);
+      const token = await auth.getToken();
+
+      if (!token) {
+        Alert.alert("Not Authenticated", "Please log in to add meals.");
+        return;
+      }
+
+      const qty = parseFloat(quantity) || 1;
+      const mealItem = {
+        food_id: selectedFood.id,
+        name: selectedFood.name,
+        brand: selectedFood.brand ?? null,
+        kcal: selectedFood.kcal ?? null,
+        qty,
+      };
+
+      const mealData = {
+        occurred_at: new Date().toISOString(),
+        meal_type: mealType,
+        items: [mealItem],
+      };
+
+      const response = await fetch(`${API_BASE}/meals`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(mealData),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save meal");
+      }
+
+      const successMessage = `${selectedFood.name} was added to your ${mealType}.`;
+      Alert.alert("Success!", successMessage, [{ text: "OK", onPress: closeModal }]);
+    } catch (error) {
+      console.error("Failed to add saved food to meal:", error);
+      Alert.alert("Error", "Failed to add food to meal");
+    } finally {
+      setSavingMeal(false);
+    }
+  };
+
+  const closeModal = () => {
+    Keyboard.dismiss();
+    setQuantityModalVisible(false);
+    setSelectedFood(null);
+    setQuantity("1");
+    setMealType("snack");
+  };
+
+  const getServingText = (food: Food) => {
+    const kcal = food.kcal ? Math.round(food.kcal) : 0;
+    return kcal > 0 ? `${kcal} kcal per serving` : "Calories vary by serving";
+  };
+
+  const filteredRows = savedRows.filter((row) => {
+    const food = row.food as Food;
+    return (
+      food.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (food.brand && food.brand.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  });
 
   if (loading) {
     return (
@@ -124,16 +164,27 @@ export default function AddSaved() {
 
   return (
     <View style={styles.container}>
-      {/* Search Header */}
+      <View style={[styles.topSafeArea, { height: insets.top }]} />
       <View style={styles.searchHeader}>
-        <View style={styles.searchContainer}>
-          <FontAwesome name="search" size={18} color={Colors.neutral.mutedGray} style={styles.searchIcon} />
+        <View style={styles.searchHeaderRow}>
+          <TouchableOpacity style={styles.backButton} onPress={handleBackToAddMeal}>
+            <FontAwesome name="arrow-left" size={18} color={Colors.neutral.textDark} />
+          </TouchableOpacity>
+
+          <View style={styles.searchContainer}>
+          <FontAwesome
+            name="search"
+            size={18}
+            color={Colors.neutral.mutedGray}
+            style={styles.searchIcon}
+          />
           <TextInput
             style={styles.searchInput}
             placeholder="Search saved foods..."
             placeholderTextColor={Colors.neutral.mutedGray}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery("")}>
@@ -141,29 +192,26 @@ export default function AddSaved() {
             </TouchableOpacity>
           )}
         </View>
+        </View>
       </View>
 
-      {/* Content */}
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {savedFoods.length === 0 ? (
+        {savedRows.length === 0 ? (
           <View style={styles.emptyContainer}>
             <FontAwesome name="bookmark-o" size={64} color={Colors.neutral.mutedGray} />
             <Text style={styles.emptyTitle}>No Saved Foods Yet</Text>
             <Text style={styles.emptyText}>
               Your frequently used foods will appear here. Start by adding meals!
             </Text>
-            <TouchableOpacity
-              style={styles.emptyButton}
-              onPress={() => router.push("/search")}
-            >
+            <TouchableOpacity style={styles.emptyButton} onPress={() => router.push("/search")}>
               <Text style={styles.emptyButtonText}>Search Foods</Text>
             </TouchableOpacity>
           </View>
-        ) : filteredFoods.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <View style={styles.emptyContainer}>
             <FontAwesome name="search" size={64} color={Colors.neutral.mutedGray} />
             <Text style={styles.emptyTitle}>No Results</Text>
@@ -176,43 +224,117 @@ export default function AddSaved() {
             <View style={styles.header}>
               <Text style={styles.headerTitle}>Saved Foods</Text>
               <Text style={styles.headerSubtitle}>
-                {filteredFoods.length} food{filteredFoods.length !== 1 ? "s" : ""}
+                {filteredRows.length} food{filteredRows.length !== 1 ? "s" : ""}
               </Text>
             </View>
 
-            {filteredFoods.map((food) => (
-              <TouchableOpacity
-                key={food.id}
-                style={styles.foodCard}
-                onPress={() => handleAddFood(food)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.foodIcon}>
-                  <FontAwesome name="cutlery" size={20} color={Colors.primary.orange} />
-                </View>
-                <View style={styles.foodInfo}>
-                  <Text style={styles.foodName}>{food.name}</Text>
-                  {food.brand && (
-                    <Text style={styles.foodBrand}>{food.brand}</Text>
-                  )}
-                  {food.servingUnit && (
-                    <Text style={styles.foodServing}>
-                      {food.servingQty || 1} {food.servingUnit}
-                    </Text>
-                  )}
-                </View>
-                {food.kcal && (
-                  <View style={styles.calorieBadge}>
-                    <Text style={styles.calorieText}>{Math.round(food.kcal)}</Text>
-                    <Text style={styles.calorieUnit}>kcal</Text>
+            {filteredRows.map((row) => {
+              const food = row.food as Food;
+
+              return (
+                <TouchableOpacity
+                  key={row.id}
+                  style={styles.foodCard}
+                  onPress={() => handleAddFood(food)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.foodIcon}>
+                    <FontAwesome name="cutlery" size={20} color={Colors.primary.orange} />
                   </View>
-                )}
-                <FontAwesome name="plus-circle" size={24} color={Colors.primary.green} />
-              </TouchableOpacity>
-            ))}
+
+                  <View style={styles.foodInfo}>
+                    <Text style={styles.foodName}>{food.name}</Text>
+                    {food.brand && <Text style={styles.foodBrand}>{food.brand}</Text>}
+                    {food.servingUnit && (
+                      <Text style={styles.foodServing}>
+                        {food.servingQty || 1} {food.servingUnit}
+                      </Text>
+                    )}
+                  </View>
+
+                  {food.kcal ? (
+                    <View style={styles.calorieBadge}>
+                      <Text style={styles.calorieText}>{Math.round(food.kcal)}</Text>
+                      <Text style={styles.calorieUnit}>kcal</Text>
+                    </View>
+                  ) : null}
+
+                  <TouchableOpacity
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      handleRemove(row.id);
+                    }}
+                  >
+                    <FontAwesome name="trash" size={22} color={Colors.primary.orange} />
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              );
+            })}
           </>
         )}
       </ScrollView>
+
+      <Modal
+        visible={quantityModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeModal}
+      >
+        <Pressable style={styles.modalOverlay} onPress={closeModal}>
+          <Pressable style={styles.modalContent} onPress={(event) => event.stopPropagation()}>
+            {selectedFood && (
+              <>
+                <View style={styles.modalHeader}>
+                  <View style={styles.modalHeaderRow}>
+                    <View style={styles.modalHeaderText}>
+                      <Text style={styles.modalTitle}>{selectedFood.name}</Text>
+                      {selectedFood.brand && <Text style={styles.modalBrand}>{selectedFood.brand}</Text>}
+                    </View>
+                    <TouchableOpacity style={styles.keyboardDismissButton} onPress={closeModal}>
+                      <FontAwesome name="times" size={16} color={Colors.neutral.textDark} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={styles.quantityContainer}>
+                  <Text style={styles.quantityLabel}>Servings</Text>
+                  <TextInput
+                    style={styles.quantityInput}
+                    value={quantity}
+                    onChangeText={setQuantity}
+                    keyboardType="decimal-pad"
+                    placeholder="1"
+                  />
+                  <Text style={styles.quantityUnit}>{getServingText(selectedFood)}</Text>
+                </View>
+
+                <MealTypeSelector
+                  value={mealType}
+                  onChange={setMealType}
+                  style={styles.mealTypeSelector}
+                />
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={closeModal}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.addButton, savingMeal ? styles.addButtonDisabled : null]}
+                    onPress={handleSaveMeal}
+                    disabled={savingMeal}
+                  >
+                    <Text style={styles.addButtonText}>{savingMeal ? "Saving..." : "Add to Meal"}</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <KeyboardDismissAccessory />
     </View>
   );
 }
@@ -222,13 +344,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.neutral.backgroundLight,
   },
+  topSafeArea: { backgroundColor: "#000000" },
   searchHeader: {
     backgroundColor: Colors.neutral.cardSurface,
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
+  searchHeaderRow: { flexDirection: "row", alignItems: "center", gap: Theme.spacing.md },
+  backButton: { width: 40, height: 40, borderRadius: Theme.radius.full, alignItems: "center", justifyContent: "center", backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0" },
   searchContainer: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.neutral.backgroundLight,
@@ -368,4 +494,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "flex-end" },
+  modalContent: { backgroundColor: Colors.neutral.cardSurface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, minHeight: "65%", maxHeight: "94%" },
+  modalHeader: { marginBottom: 20 },
+  modalHeaderRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: Theme.spacing.md },
+  modalHeaderText: { flex: 1 },
+  modalTitle: { fontSize: 22, fontWeight: "800", color: Colors.neutral.textDark, marginBottom: 4 },
+  modalBrand: { fontSize: 14, color: Colors.neutral.mutedGray },
+  keyboardDismissButton: { width: 32, height: 32, borderRadius: Theme.radius.full, alignItems: "center", justifyContent: "center", backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0" },
+  quantityContainer: { marginBottom: 20 },
+  quantityLabel: { fontSize: 14, fontWeight: "600", color: Colors.neutral.textDark, marginBottom: 8 },
+  quantityInput: {
+    backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0",
+    borderRadius: 12, padding: 16, fontSize: 18, fontWeight: "600", color: Colors.neutral.textDark,
+  },
+  quantityUnit: { marginTop: 8, fontSize: 13, color: Colors.neutral.mutedGray },
+  mealTypeSelector: { marginBottom: Theme.spacing.lg },
+  modalActions: { flexDirection: "row", gap: Theme.spacing.md },
+  modalButton: { flex: 1, padding: 16, borderRadius: 12, alignItems: "center" },
+  cancelButton: { backgroundColor: Colors.neutral.backgroundLight, borderWidth: 1, borderColor: "#E0E0E0" },
+  cancelButtonText: { fontSize: 16, fontWeight: "600", color: Colors.neutral.textDark },
+  addButton: { backgroundColor: Colors.primary.green },
+  addButtonDisabled: { opacity: 0.7 },
+  addButtonText: { fontSize: 16, fontWeight: "700", color: "#FFFFFF" },
 });

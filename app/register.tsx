@@ -1,5 +1,5 @@
 import { auth } from "@/src/lib/auth";
-import { signInWithGoogle, signInWithApple } from "@/src/lib/oauth";
+import { signInWithApple } from "@/src/lib/oauth";
 import { useFadeIn, useScaleIn, useSlideInY } from "@/src/ui/animations";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -8,6 +8,7 @@ import { Animated, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView,
 import { API_BASE } from "@/src/constants/api";
 import { Theme } from "@/constants/Theme";
 import { GradientScreen } from "@/components/ui/GradientScreen";
+import { KeyboardDismissAccessory } from "@/components/ui/KeyboardDismissAccessory";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { SecondaryButton } from "@/components/ui/SecondaryButton";
 import { TextField } from "@/components/ui/TextField";
@@ -25,6 +26,8 @@ export default function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
+  const [passwordShakeTrigger, setPasswordShakeTrigger] = useState(0);
+  const [confirmPasswordShakeTrigger, setConfirmPasswordShakeTrigger] = useState(0);
 
   // Animations
   const heroOpacity = useFadeIn(500, 100);
@@ -65,11 +68,15 @@ export default function Register() {
     }
 
     if (password.length < 8) {
+      setPasswordError("Password must be at least 8 characters");
+      setPasswordShakeTrigger((value) => value + 1);
       Alert.alert("Weak Password", "Password must be at least 8 characters long.");
       return;
     }
 
     if (password !== confirmPassword) {
+      setConfirmPasswordError("Passwords do not match");
+      setConfirmPasswordShakeTrigger((value) => value + 1);
       Alert.alert("Password Mismatch", "Passwords do not match. Please try again.");
       return;
     }
@@ -131,13 +138,11 @@ export default function Register() {
     }
   };
 
-  const handleOAuth = async (provider: "google" | "apple") => {
+  const handleOAuth = async () => {
     setLoading(true);
     try {
-      const result = provider === "google" 
-        ? await signInWithGoogle()
-        : await signInWithApple();
-      
+      const result = await signInWithApple();
+
       if (result.success && result.token) {
         Alert.alert(
           "Success!",
@@ -155,14 +160,14 @@ export default function Register() {
       } else {
         Alert.alert(
           "Sign In Failed",
-          result.error || `${provider === "google" ? "Google" : "Apple"} sign-in failed. Please try again.`
+          result.error || "Apple sign-in failed. Please try again."
         );
       }
     } catch (error: any) {
       console.error("OAuth error:", error);
       Alert.alert(
         "Sign In Failed",
-        `Failed to sign in with ${provider === "google" ? "Google" : "Apple"}. Please try again.`
+        "Failed to sign in with Apple. Please try again."
       );
     } finally {
       setLoading(false);
@@ -243,6 +248,7 @@ export default function Register() {
                 icon="lock"
                 editable={!loading}
                 error={passwordError}
+                shakeTrigger={passwordShakeTrigger}
                 rightIcon={
                   <Pressable onPress={() => setShowPassword(!showPassword)}>
                     <FontAwesome
@@ -271,6 +277,7 @@ export default function Register() {
                 icon="lock"
                 editable={!loading}
                 error={confirmPasswordError}
+                shakeTrigger={confirmPasswordShakeTrigger}
                 rightIcon={
                   <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
                     <FontAwesome
@@ -294,21 +301,11 @@ export default function Register() {
 
               <Divider text="OR" />
 
-              <Animated.View style={{ opacity: button2Opacity }}>
-                <SecondaryButton
-                  title="Continue with Google"
-                  onPress={() => handleOAuth("google")}
-                  disabled={loading}
-                  icon={<FontAwesome name="google" size={18} color={Theme.colors.text.primary} />}
-                  style={styles.oauthButton}
-                />
-              </Animated.View>
-
               {Platform.OS === "ios" && (
                 <Animated.View style={{ opacity: button3Opacity }}>
                   <SecondaryButton
                     title="Continue with Apple"
-                    onPress={() => handleOAuth("apple")}
+                    onPress={handleOAuth}
                     disabled={loading}
                     icon={<FontAwesome name="apple" size={18} color={Theme.colors.text.primary} />}
                     style={styles.oauthButton}
@@ -327,6 +324,7 @@ export default function Register() {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <KeyboardDismissAccessory />
     </GradientScreen>
   );
 }

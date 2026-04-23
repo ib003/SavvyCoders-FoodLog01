@@ -2,11 +2,14 @@ import { API_BASE } from "@/src/constants/api";
 import { analyzeFood } from "@/src/lib/allergenChecker";
 import { auth } from "@/src/lib/auth";
 import AllergenWarning from "@/components/AllergenWarning";
+import { KeyboardDismissAccessory, KEYBOARD_DISMISS_ACCESSORY_ID } from "@/components/ui/KeyboardDismissAccessory";
+import { MealTypeSelector } from "@/components/ui/MealTypeSelector";
 import { Colors } from "@/constants/Colors";
+import { Theme } from "@/constants/Theme";
 import { FontAwesome } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +22,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { MealTypeValue } from "@/src/lib/mealTypes";
 
 interface Food {
   id: string;
@@ -43,6 +47,8 @@ export default function AddBarcode() {
   const [quantityModalVisible, setQuantityModalVisible] = useState(false);
   const [allergenAnalysis, setAllergenAnalysis] = useState<any>(null);
   const [isSafe, setIsSafe] = useState<boolean | null>(null);
+  const [mealType, setMealType] = useState<MealTypeValue>("snack");
+  const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!permission) {
@@ -53,6 +59,7 @@ export default function AddBarcode() {
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     if (scanned || scanning) return;
     
+    if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
     setScanning(true);
     setScanned(true);
     setLoading(true);
@@ -76,12 +83,18 @@ export default function AddBarcode() {
       const foodData: Food = await response.json();
       setFood(foodData);
 
-      // Check for allergens
+      // Check for allergens and dietary preferences
       const foodTags = [foodData.name.toLowerCase()];
       if (foodData.brand) {
         foodTags.push(foodData.brand.toLowerCase());
       }
-      const analysis = await analyzeFood(foodTags);
+      const macros = {
+        kcal: foodData.kcal ?? 0,
+        protein: foodData.macros?.protein ?? 0,
+        carbs: foodData.macros?.carbs ?? 0,
+        fat: foodData.macros?.fat ?? 0,
+      };
+      const analysis = await analyzeFood(foodTags, undefined, macros);
       setAllergenAnalysis(analysis);
       
       // Determine if safe
@@ -105,6 +118,7 @@ export default function AddBarcode() {
     setQuantity("1");
     setIsSafe(null);
     setAllergenAnalysis(null);
+    setMealType("snack");
   };
 
   const handleAddToMeal = async () => {
@@ -126,10 +140,11 @@ export default function AddBarcode() {
         },
         body: JSON.stringify({
           occurred_at: now.toISOString(),
-          meal_type: "snack",
+          meal_type: mealType,
           items: [{
             food_id: food.id,
             qty: parseFloat(quantity) || 1,
+            kcal: Math.round((food.kcal ?? 0) * (parseFloat(quantity) || 1)),
           }],
         }),
       });
@@ -196,17 +211,18 @@ export default function AddBarcode() {
     setManualScan(true);
     setError(null);
     // disable after 8s and notify if nothing found
-    setTimeout(() => {
-      if (!scanned) {
-        setManualScan(false);
-        setError("No barcode detected");
-        Alert.alert(
-          "No barcode detected",
-          "We couldn't find a barcode. Try moving the camera closer and try again."
-        );
-      } else {
-        setManualScan(false);
-      }
+    scanTimeoutRef.current = setTimeout(() => {
+      setManualScan(false);
+      setScanned(prev => {
+        if (!prev) {
+          setError("No barcode detected");
+          Alert.alert(
+            "No barcode detected",
+            "We couldn't find a barcode. Try moving the camera closer and try again."
+          );
+        }
+        return prev;
+      });
     }, 8000);
   };
 
@@ -353,6 +369,7 @@ export default function AddBarcode() {
                       style={styles.quantityInput}
                       value={quantity}
                       onChangeText={setQuantity}
+                      inputAccessoryViewID={KEYBOARD_DISMISS_ACCESSORY_ID}
                       keyboardType="decimal-pad"
                       placeholder="1"
                     />
@@ -360,6 +377,12 @@ export default function AddBarcode() {
                       <Text style={styles.quantityUnit}>{food.servingUnit}</Text>
                     )}
                   </View>
+
+                  <MealTypeSelector
+                    value={mealType}
+                    onChange={setMealType}
+                    style={styles.mealTypeSelector}
+                  />
 
                   {/* Actions */}
                   <View style={styles.modalActions}>
@@ -382,6 +405,7 @@ export default function AddBarcode() {
           </Pressable>
         </Pressable>
       </Modal>
+      <KeyboardDismissAccessory />
     </View>
   );
 }
@@ -648,6 +672,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 13,
     color: Colors.neutral.mutedGray,
+  },
+  mealTypeSelector: {
+    marginBottom: Theme.spacing.xl,
   },
   modalActions: {
     flexDirection: "row",
